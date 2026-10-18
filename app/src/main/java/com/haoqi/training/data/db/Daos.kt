@@ -81,6 +81,12 @@ interface TrainingDao {
 @Dao
 interface DietDao {
 
+    @Query("SELECT * FROM daily_activity WHERE date = :date")
+    fun observeActivity(date: String): Flow<DailyActivityEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveActivity(activity: DailyActivityEntity)
+
     @Query("SELECT * FROM food_entries WHERE date = :date ORDER BY id ASC")
     fun observeEntries(date: String): Flow<List<FoodEntryEntity>>
 

@@ -63,7 +63,7 @@ fun SettingsScreen(
     var age by remember(state.profile.age) { mutableStateOf(state.profile.age.toString()) }
     var height by remember(state.profile.heightCm) { mutableStateOf(formatNumber(state.profile.heightCm)) }
     var weight by remember(state.profile.weightKg) { mutableStateOf(formatNumber(state.profile.weightKg)) }
-    var activity by remember(state.profile.activityKcal) { mutableStateOf(formatNumber(state.profile.activityKcal)) }
+
 
     var baseUrl by remember(state.apiConfig.baseUrl) { mutableStateOf(state.apiConfig.baseUrl) }
     var model by remember(state.apiConfig.model) { mutableStateOf(state.apiConfig.model) }
@@ -76,7 +76,6 @@ fun SettingsScreen(
         heightCm = height.toFloatOrNull() ?: 175f,
         ageYears = age.toIntOrNull() ?: 30,
     )
-    val total = bmr + (activity.toFloatOrNull() ?: 0f)
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -130,10 +129,8 @@ fun SettingsScreen(
                     NumberInput("体重 kg", weight, { weight = it.take(5) }, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
-                NumberInput("活动代谢 kcal/天", activity, { activity = it.take(5) }, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(10.dp))
                 Text(
-                    "基础代谢 ${bmr.toInt()} + 活动 ${(activity.toFloatOrNull() ?: 0f).toInt()} = 总消耗 ${total.toInt()} kcal/天",
+                    "基础代谢估算 ${bmr.toInt()} kcal/天；活动消耗在饮食页按日填写",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -146,7 +143,7 @@ fun SettingsScreen(
                                 age = age.toIntOrNull() ?: 30,
                                 heightCm = height.toFloatOrNull() ?: 175f,
                                 weightKg = weight.toFloatOrNull() ?: 70f,
-                                activityKcal = (activity.toFloatOrNull() ?: 0f).coerceAtLeast(0f),
+                                activityKcal = state.profile.activityKcal,
                             )
                         )
                     },

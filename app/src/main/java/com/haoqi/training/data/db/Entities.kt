@@ -96,6 +96,13 @@ data class FoodEntryEntity(
     val estimated: Boolean = false,
 )
 
+/** 每个本地日期独立保存活动消耗；缺记录时视为 0，不沿用旧资料常量。 */
+@Entity(tableName = "daily_activity")
+data class DailyActivityEntity(
+    @PrimaryKey val date: String,
+    val kcal: Float,
+)
+
 /** 个人资料（只有一份）。configured=false 表示用户还没保存过，界面不应把默认值当真实数据。 */
 @Entity(tableName = "profile")
 data class ProfileEntity(

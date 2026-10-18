@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import com.haoqi.training.domain.DailyDiet
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 enum class MealType(val label: String) {
     BREAKFAST("早餐"),
@@ -33,7 +36,7 @@ enum class MealType(val label: String) {
 sealed interface AiState {
     data object Idle : AiState
     data object Analyzing : AiState
-    data class Result(val drafts: List<FoodDraft>) : AiState
+    data class Result(val drafts: List<FoodDraft>, val date: String) : AiState
     data class Failed(val message: String) : AiState
 }
 
@@ -41,6 +44,8 @@ data class DietUiState(
     val date: String = LocalDate.now().toString(),
     val entries: List<FoodEntryEntity> = emptyList(),
     val profile: ProfileEntity? = null,
+    val activityKcal: Float = 0f,
+    val message: String? = null,
     val aiState: AiState = AiState.Idle,
 ) {
     val totalKcal: Float get() = entries.sumOf { it.kcal.toDouble() }.toFloat()
@@ -48,19 +53,12 @@ data class DietUiState(
     val totalFat: Float get() = entries.sumOf { it.fat.toDouble() }.toFloat()
     val totalCarbs: Float get() = entries.sumOf { it.carbs.toDouble() }.toFloat()
 
-    /** 用户还没保存过资料时返回 0，界面会提示先去设置，避免拿默认值当真实消耗。 */
-    val expenditureKcal: Float
-        get() {
-            val profile = profile ?: return 0f
-            if (!profile.configured) return 0f
-            return BmrCalculator.totalKcal(
-                sex = runCatching { Sex.valueOf(profile.sex) }.getOrDefault(Sex.MALE),
-                weightKg = profile.weightKg,
-                heightCm = profile.heightCm,
-                ageYears = profile.age,
-                activityKcal = profile.activityKcal,
-            )
+    val bmrKcal: Float?
+        get() = profile?.takeIf { it.configured }?.let {
+            BmrCalculator.bmrKcal(runCatching { Sex.valueOf(it.sex) }.getOrDefault(Sex.MALE),
+                it.weightKg, it.heightCm, it.age).takeIf { value -> value.isFinite() && value >= 0f }
         }
+    val expenditureKcal: Float get() = DailyDiet.expenditure(bmrKcal, activityKcal)
 
     fun entriesOf(meal: MealType): List<FoodEntryEntity> = entries.filter { it.meal == meal.name }
 }
@@ -80,27 +78,49 @@ class DietViewModel(
     private var analyzeJob: Job? = null
     private val client = DeepSeekClient()
 
-    private val entriesFlow = selectedDate.flatMapLatest { dietRepo.observeEntries(it) }
-
-    val uiState: StateFlow<DietUiState> = combine(
-        entriesFlow,
-        profileRepo.profileFlow,
-        aiState,
-    ) { entries, profile, ai ->
-        DietUiState(date = selectedDate.value, entries = entries, profile = profile, aiState = ai)
+    private val message = MutableStateFlow<String?>(null)
+    val uiState: StateFlow<DietUiState> = selectedDate.flatMapLatest { day ->
+        combine(dietRepo.observeEntries(day), dietRepo.observeActivity(day),
+            profileRepo.profileFlow, aiState, message) { entries, activity, profile, ai, notice ->
+            DietUiState(day, entries, profile, activity?.kcal ?: 0f, notice, ai)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DietUiState(date = selectedDate.value))
 
     init {
         viewModelScope.launch { profileRepo.ensureDefault() }
+        viewModelScope.launch {
+            while (isActive) { refreshDate(); delay(1_000) }
+        }
+    }
+
+    private fun currentDay(editorDate: String): Boolean {
+        refreshDate()
+        return DailyDiet.canSave(editorDate, LocalDate.now()).also {
+            if (!it) message.value = "日期已切换，未保存旧日期操作，请重新填写今天的数据"
+        }
+    }
+
+    fun saveActivity(editorDate: String, kcal: Float) {
+        if (!currentDay(editorDate)) return
+        if (!DailyDiet.validActivity(kcal)) { message.value = "活动消耗必须是非负有限数字"; return }
+        viewModelScope.launch {
+            dietRepo.saveActivity(editorDate, kcal)
+            message.value = "已保存 $editorDate 的活动消耗"
+        }
     }
 
     /** 日期变了就切到新的「今天」。 */
     fun refreshDate() {
         val today = LocalDate.now().toString()
-        if (today != selectedDate.value) selectedDate.value = today
+        if (today != selectedDate.value) {
+            selectedDate.value = today
+            clearAiState()
+            message.value = "日期已切换为 $today，未填写的活动消耗默认为 0"
+        }
     }
 
     fun addEntry(
+        editorDate: String,
         meal: MealType,
         name: String,
         portion: String,
@@ -110,11 +130,11 @@ class DietViewModel(
         carbs: Float,
         estimated: Boolean,
     ) {
-        if (name.isBlank()) return
+        if (!currentDay(editorDate) || name.isBlank()) return
         viewModelScope.launch {
             dietRepo.addEntry(
                 FoodEntryEntity(
-                    date = date,
+                    date = editorDate,
                     meal = meal.name,
                     name = name.trim(),
                     portion = portion.trim().ifBlank { "1 份" },
@@ -129,14 +149,17 @@ class DietViewModel(
     }
 
     fun updateEntry(entry: FoodEntryEntity) {
+        if (!currentDay(entry.date)) return
         viewModelScope.launch { dietRepo.updateEntry(entry) }
     }
 
     fun deleteEntry(entry: FoodEntryEntity) {
+        if (!currentDay(entry.date)) return
         viewModelScope.launch { dietRepo.deleteEntry(entry) }
     }
 
-    fun analyzePhoto(imageBytes: ByteArray, mime: String) {
+    fun analyzePhoto(editorDate: String, imageBytes: ByteArray, mime: String) {
+        if (!currentDay(editorDate)) return
         val config = apiConfigStore.config.value
         if (!config.isConfigured) {
             aiState.value = AiState.Failed("请先在设置里填写 DeepSeek API Key")
@@ -147,7 +170,7 @@ class DietViewModel(
         analyzeJob = viewModelScope.launch {
             val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
             client.analyzeFood(config, base64, mime)
-                .onSuccess { aiState.value = AiState.Result(it) }
+                .onSuccess { if (currentDay(editorDate)) aiState.value = AiState.Result(it, editorDate) }
                 .onFailure { error ->
                     if (error is kotlinx.coroutines.CancellationException) throw error
                     aiState.value = AiState.Failed(error.message ?: "识别失败")
@@ -156,9 +179,11 @@ class DietViewModel(
     }
 
     /** 识别结果确认后入账（全部标记为估算）。 */
-    fun confirmDrafts(meal: MealType, drafts: List<FoodDraft>) {
+    fun confirmDrafts(editorDate: String, meal: MealType, drafts: List<FoodDraft>) {
+        if (!currentDay(editorDate)) return
         drafts.forEach { draft ->
             addEntry(
+                editorDate = editorDate,
                 meal = meal,
                 name = draft.name,
                 portion = draft.portion,

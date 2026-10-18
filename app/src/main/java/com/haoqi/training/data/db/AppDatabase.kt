@@ -15,8 +15,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SetStateEntity::class,
         FoodEntryEntity::class,
         ProfileEntity::class,
+        DailyActivityEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,9 +44,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4: no synthetic daily data; retain the legacy profile column unchanged. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS `daily_activity` (`date` TEXT NOT NULL, `kcal` REAL NOT NULL, PRIMARY KEY(`date`))")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "curious_training.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

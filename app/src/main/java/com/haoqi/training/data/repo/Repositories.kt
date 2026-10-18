@@ -107,6 +107,14 @@ class DietRepository(db: AppDatabase) {
 
     fun observeEntries(date: String): Flow<List<FoodEntryEntity>> = dao.observeEntries(date)
 
+    fun observeActivity(date: String) = dao.observeActivity(date)
+
+    suspend fun saveActivity(date: String, kcal: Float) {
+        require(kcal.isFinite() && kcal >= 0f)
+        java.time.LocalDate.parse(date)
+        dao.saveActivity(com.haoqi.training.data.db.DailyActivityEntity(date, kcal))
+    }
+
     suspend fun addEntry(entry: FoodEntryEntity): Long = dao.insertEntry(entry)
 
     suspend fun updateEntry(entry: FoodEntryEntity) = dao.updateEntry(entry)

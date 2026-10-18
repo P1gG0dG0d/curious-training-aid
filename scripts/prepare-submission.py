@@ -27,7 +27,7 @@ def main():
     readme = readme.replace('](允许后续开源.md)', '](../允许后续开源.md)')
     (SOURCE / 'README.md').write_text(readme, encoding='utf-8')
     (STAGE / '安装包').mkdir(exist_ok=True)
-    shutil.copy2(ROOT / 'dist/haoqi-training-0.2.5.apk', STAGE / '安装包/好奇训练-0.2.5.apk')
+    shutil.copy2(ROOT / 'dist/haoqi-training-0.2.6.apk', STAGE / '安装包/好奇训练-0.2.6.apk')
     files = sorted(p for p in STAGE.rglob('*') if p.is_file())
     # Block accidental build products, local config, keys and caches in the source copy.
     for p in files:

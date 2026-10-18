@@ -203,14 +203,15 @@ private fun AppRoot() {
                 AppTab.DIET -> DietScreen(
                     state = dietState,
                     apiConfig = settingsState.apiConfig,
-                    onAddFood = { meal, name, portion, kcal, protein, fat, carbs, estimated ->
-                        dietViewModel.addEntry(meal, name, portion, kcal, protein, fat, carbs, estimated)
+                    onAddFood = { date, meal, name, portion, kcal, protein, fat, carbs, estimated ->
+                        dietViewModel.addEntry(date, meal, name, portion, kcal, protein, fat, carbs, estimated)
                     },
                     onDeleteEntry = dietViewModel::deleteEntry,
                     onUpdateEntry = dietViewModel::updateEntry,
                     onAnalyzePhoto = dietViewModel::analyzePhoto,
                     onConfirmDrafts = dietViewModel::confirmDrafts,
                     onClearAiState = dietViewModel::clearAiState,
+                    onSaveActivity = dietViewModel::saveActivity,
                     onOpenSettings = { showSettings = true },
                     modifier = Modifier.padding(padding),
                 )

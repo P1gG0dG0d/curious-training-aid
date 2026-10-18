@@ -42,6 +42,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.haoqi.training.domain.DailyDiet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -90,12 +92,13 @@ import java.util.Locale
 fun DietScreen(
     state: DietUiState,
     apiConfig: ApiConfig,
-    onAddFood: (MealType, String, String, Float, Float, Float, Float, Boolean) -> Unit,
+    onAddFood: (String, MealType, String, String, Float, Float, Float, Float, Boolean) -> Unit,
     onDeleteEntry: (FoodEntryEntity) -> Unit,
     onUpdateEntry: (FoodEntryEntity) -> Unit,
-    onAnalyzePhoto: (ByteArray, String) -> Unit,
-    onConfirmDrafts: (MealType, List<FoodDraft>) -> Unit,
+    onAnalyzePhoto: (String, ByteArray, String) -> Unit,
+    onConfirmDrafts: (String, MealType, List<FoodDraft>) -> Unit,
     onClearAiState: () -> Unit,
+    onSaveActivity: (String, Float) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -106,14 +109,24 @@ fun DietScreen(
     var manualMeal by remember { mutableStateOf<MealType?>(null) }
     var editingEntry by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var pendingMeal by remember { mutableStateOf(MealType.LUNCH) }
+    var editorDate by remember { mutableStateOf(state.date) }
+    var photoDate by remember { mutableStateOf(state.date) }
+    var activityText by remember(state.date, state.activityKcal) { mutableStateOf(state.activityKcal.toString()) }
+    val activityValue = activityText.toFloatOrNull()
+    LaunchedEffect(state.date) {
+        addMeal = null
+        manualMeal = null
+        editingEntry = null
+    }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
 
     fun compressAndAnalyze(uri: Uri) {
+        val capturedDate = photoDate
         scope.launch {
             val bytes = withContext(Dispatchers.IO) { ImageCompressor.loadJpegBytes(context, uri) }
             if (bytes != null) {
                 // 压缩后一律是 JPEG，MIME 跟着实际内容走
-                onAnalyzePhoto(bytes, "image/jpeg")
+                onAnalyzePhoto(capturedDate, bytes, "image/jpeg")
             }
         }
     }
@@ -141,6 +154,25 @@ fun DietScreen(
             Spacer(Modifier.width(8.dp))
         }
 
+        SectionLabel(state.date)
+        GroupCard {
+            Text("今日活动消耗", style = MaterialTheme.typography.titleLarge)
+            Text("仅保存到 ${state.date}，新一天默认 0", style = MaterialTheme.typography.bodySmall)
+            KeyboardGuardTextField(
+                value = activityText,
+                onValueChange = { activityText = it },
+                label = { Text("活动消耗 kcal") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (activityValue == null || !DailyDiet.validActivity(activityValue)) {
+                Text("请输入非负有限数字", color = DangerRed, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(onClick = { activityValue?.let { onSaveActivity(state.date, it) } },
+                enabled = activityValue != null && DailyDiet.validActivity(activityValue),
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("保存今日活动消耗") }
+            state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
         CalorieGroupCard(state)
 
         SectionLabel("营养摄入")
@@ -158,7 +190,7 @@ fun DietScreen(
                 MealSection(
                     meal = meal,
                     entries = entries,
-                    onAdd = { addMeal = meal },
+                    onAdd = { editorDate = state.date; addMeal = meal },
                     onDelete = onDeleteEntry,
                     onEdit = { editingEntry = it },
                 )
@@ -183,11 +215,13 @@ fun DietScreen(
             onPickPhoto = {
                 addMeal = null
                 pendingMeal = meal
+                photoDate = editorDate
                 pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },
             onTakePhoto = {
                 addMeal = null
                 pendingMeal = meal
+                photoDate = editorDate
                 val dir = File(context.cacheDir, "camera").apply { mkdirs() }
                 val file = File.createTempFile("food_", ".jpg", dir)
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -206,7 +240,7 @@ fun DietScreen(
             meal = meal,
             onDismiss = { manualMeal = null },
             onSave = { draft ->
-                onAddFood(meal, draft.name, draft.portion, draft.kcal, draft.protein, draft.fat, draft.carbs, false)
+                onAddFood(editorDate, meal, draft.name, draft.portion, draft.kcal, draft.protein, draft.fat, draft.carbs, false)
                 manualMeal = null
             },
         )
@@ -240,7 +274,7 @@ fun DietScreen(
         is AiState.Result -> FoodDraftDialog(
             initialMeal = pendingMeal,
             drafts = ai.drafts,
-            onConfirm = { meal, drafts -> onConfirmDrafts(meal, drafts) },
+            onConfirm = { meal, drafts -> onConfirmDrafts(ai.date, meal, drafts) },
             onDismiss = onClearAiState,
         )
         AiState.Idle -> Unit
@@ -272,6 +306,7 @@ private fun CalorieGroupCard(state: DietUiState) {
                 }
             }
         }
+        Text("基础代谢 ${state.bmrKcal?.toInt()?.toString() ?: "未配置"} + 今日活动 ${state.activityKcal.toInt()} kcal", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(12.dp))
         CalorieBars(
             expenditureKcal = state.expenditureKcal,
@@ -282,7 +317,7 @@ private fun CalorieGroupCard(state: DietUiState) {
         val differenceText = "消耗摄入差为：${delta.toInt()} 千卡（消耗 − 摄入）"
         val overTarget = CalorieChartMath.isAtLeastTarget(state.expenditureKcal, state.totalKcal)
         val statusText = when {
-            state.expenditureKcal <= 0f -> "先在设置里填个人资料和活动代谢，才会有总消耗"
+            state.bmrKcal == null -> "基础代谢未配置：当前仅含今日活动消耗，请到设置保存个人资料"
             overTarget -> "已达到 500 千卡目标\n$differenceText"
             else -> "未达到 500 千卡目标\n$differenceText"
         }
