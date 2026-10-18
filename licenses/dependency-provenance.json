@@ -1,0 +1,101 @@
+[
+  {
+    "file": "Inter-4.001-upstream-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/rsms/inter/66647c0bb/LICENSE.txt",
+    "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+  },
+  {
+    "file": "compose-bom-2024.09.03.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/compose-bom/2024.09.03/compose-bom-2024.09.03.pom",
+    "sha256": "4ca667331d8facc8606be308d389a4c0094db92db37dd646998c8b11260d09e6",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n\t\t<ns0:license>\n\t\t\t<ns0:name>The Apache Software License, Version 2.0</ns0:name>\n\t\t\t<ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n\t\t\t<ns0:distribution>repo</ns0:distribution>\n\t\t</ns0:license>\n\t</ns0:licenses>\n\t"
+    ]
+  },
+  {
+    "file": "core-ktx-1.13.1.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.13.1/core-ktx-1.13.1.pom",
+    "sha256": "31cc345b8c6cdd2046dcf67872df8a8cb4f44ea0cade4df80002caa7e3b71809",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "lifecycle-runtime-ktx-2.8.6.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-ktx/2.8.6/lifecycle-runtime-ktx-2.8.6.pom",
+    "sha256": "9194dd6858b9e62512738ba2b0e2c1541b51df67be612c476a86f9ccbc871301",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "activity-compose-1.9.2.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/activity/activity-compose/1.9.2/activity-compose-1.9.2.pom",
+    "sha256": "9d8cd9169d225d9e3c6c99bb902db110554cb3b93ba3bc7714c2fcb556c5c3c1",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "room-runtime-2.6.1.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/room/room-runtime/2.6.1/room-runtime-2.6.1.pom",
+    "sha256": "0e4150733d903468943f17dd9ceb4e828b26312966e2e13547a0e3aacd04299e",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "exifinterface-1.3.7.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/exifinterface/exifinterface/1.3.7/exifinterface-1.3.7.pom",
+    "sha256": "37dbc6b87a2409cea5588d58c8f3acab9ea82cc688ee57a201a210450ff30e0e",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "agp-8.5.2.pom",
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/8.5.2/gradle-8.5.2.pom",
+    "sha256": "f0b62d26eab8c4f83e42e30ef803acde553f039b36d6ea8f372e7bb8ae68c58f",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache Software License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n      <ns0:distribution>repo</ns0:distribution>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "kotlin-gradle-plugin-2.0.21.pom",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.0.21/kotlin-gradle-plugin-2.0.21.pom",
+    "sha256": "45e9ccece33e4d8dfa9941cc912f35458201a9d3f043720c3247adde57f47ff6",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "ksp-2.0.21-1.0.28.pom",
+    "url": "https://repo.maven.apache.org/maven2/com/google/devtools/ksp/symbol-processing-gradle-plugin/2.0.21-1.0.28/symbol-processing-gradle-plugin-2.0.21-1.0.28.pom",
+    "sha256": "1aae5d534cd9c6c8e56be7e99ab02f2868bf27f9ff09d55340c5093df7735646",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n    <ns0:license>\n      <ns0:name>The Apache License, Version 2.0</ns0:name>\n      <ns0:url>http://www.apache.org/licenses/LICENSE-2.0.txt</ns0:url>\n    </ns0:license>\n  </ns0:licenses>\n  "
+    ]
+  },
+  {
+    "file": "junit-4.13.2.pom",
+    "url": "https://repo.maven.apache.org/maven2/junit/junit/4.13.2/junit-4.13.2.pom",
+    "sha256": "569b6977ee4603c965c1c46c3058fa6e969291b0160eb6964dd092cd89eadd94",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n        <ns0:license>\n            <ns0:name>Eclipse Public License 1.0</ns0:name>\n            <ns0:url>http://www.eclipse.org/legal/epl-v10.html</ns0:url>\n            <ns0:distribution>repo</ns0:distribution>\n        </ns0:license>\n    </ns0:licenses>\n\n    "
+    ]
+  },
+  {
+    "file": "json-20240303.pom",
+    "url": "https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.pom",
+    "sha256": "994baf5d89bf4caa5ce968e4c4eab135c8f9783ecf4d2b7b0e9d1c8a4ddf1e4f",
+    "licenses": [
+      "<ns0:licenses xmlns:ns0=\"http://maven.apache.org/POM/4.0.0\">\n        <ns0:license>\n            <ns0:name>Public Domain</ns0:name>\n            <ns0:url>https://github.com/stleary/JSON-java/blob/master/LICENSE</ns0:url>\n            <ns0:distribution>repo</ns0:distribution>\n        </ns0:license>\n    </ns0:licenses>\n\n    "
+    ]
+  },
+  {
+    "file": "hamcrest-core-1.3.pom",
+    "url": "https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.pom",
+    "sha256": "fde386a7905173a1b103de6ab820727584b50d0e32282e2797787c20a64ffa93",
+    "licenses": []
+  }
+]

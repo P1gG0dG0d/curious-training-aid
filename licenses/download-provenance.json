@@ -1,0 +1,32 @@
+[
+  {
+    "file": "Inter-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt",
+    "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57",
+    "bytes": 4377
+  },
+  {
+    "file": "NotoSansSC-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/OFL.txt",
+    "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
+    "bytes": 4388
+  },
+  {
+    "file": "Gradle-8.7-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/gradle/gradle/v8.7.0/LICENSE",
+    "sha256": "9536d88ea948603d18e232a13f5958d67807cd80828036b082bff171d2cf0703",
+    "bytes": 23622
+  },
+  {
+    "file": "JSON-java-20240303-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/stleary/JSON-java/20240303/LICENSE",
+    "sha256": "86cc84f1773e3318ba26fd61b3ae508a167df38b361695e105f6e499e7a2736f",
+    "bytes": 16
+  },
+  {
+    "file": "JUnit-4.13.2-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/junit-team/junit4/r4.13.2/LICENSE-junit.txt",
+    "sha256": "9648bb2891b9813970bddb68d4be8a5e6ec8280d0180a53dfb29236b579c55bb",
+    "bytes": 11376
+  }
+]

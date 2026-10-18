@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 27+ 才支持浅色导航栏图标；API 26 保留默认深色图标 -->
+    <style name="Theme.CuriousTraining" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/warm_paper</item>
+        <item name="android:statusBarColor">@color/warm_paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/warm_paper</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

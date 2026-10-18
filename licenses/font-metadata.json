@@ -1,0 +1,222 @@
+﻿[
+  {
+    "file": "app/src/main/res/font/inter.ttf",
+    "bytes": 876576,
+    "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+    "head_fontRevision": 4.001007080078125,
+    "variation_axes": [
+      {
+        "tag": "opsz",
+        "min": 14.0,
+        "default": 14.0,
+        "max": 32.0
+      },
+      {
+        "tag": "wght",
+        "min": 100.0,
+        "default": 400.0,
+        "max": 900.0
+      }
+    ],
+    "names": [
+      {
+        "nameID": 0,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)"
+      },
+      {
+        "nameID": 1,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Inter"
+      },
+      {
+        "nameID": 2,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Regular"
+      },
+      {
+        "nameID": 3,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "4.001;git-66647c0bb;RSMS;Inter-Regular-Regular"
+      },
+      {
+        "nameID": 4,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Inter Regular"
+      },
+      {
+        "nameID": 5,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Version 4.001;git-66647c0bb"
+      },
+      {
+        "nameID": 6,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Inter-Regular"
+      },
+      {
+        "nameID": 8,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "rsms"
+      },
+      {
+        "nameID": 9,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Rasmus Andersson"
+      },
+      {
+        "nameID": 11,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "https://rsms.me/"
+      },
+      {
+        "nameID": 13,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org"
+      },
+      {
+        "nameID": 14,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "https://openfontlicense.org"
+      }
+    ]
+  },
+  {
+    "file": "app/src/main/res/font/noto_sans_sc.ttf",
+    "bytes": 17772300,
+    "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "head_fontRevision": 2.003997802734375,
+    "variation_axes": [
+      {
+        "tag": "wght",
+        "min": 100.0,
+        "default": 100.0,
+        "max": 900.0
+      }
+    ],
+    "names": [
+      {
+        "nameID": 0,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "(c) 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'."
+      },
+      {
+        "nameID": 1,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Noto Sans SC Thin"
+      },
+      {
+        "nameID": 2,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Regular"
+      },
+      {
+        "nameID": 3,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "2.004;ADBO;NotoSansSC-Thin;ADOBE"
+      },
+      {
+        "nameID": 4,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Noto Sans SC Thin"
+      },
+      {
+        "nameID": 5,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603"
+      },
+      {
+        "nameID": 6,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "NotoSansSC-Thin"
+      },
+      {
+        "nameID": 8,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Adobe"
+      },
+      {
+        "nameID": 9,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Ryoko NISHIZUKA \u897f\u585a\u6dbc\u5b50 (kana, bopomofo & ideographs); Paul D. Hunt (Latin, Greek & Cyrillic); Sandoll Communications \uc0b0\ub3cc\ucee4\ubba4\ub2c8\ucf00\uc774\uc158, Soo-young JANG \uc7a5\uc218\uc601 & Joo-yeon KANG \uac15\uc8fc\uc5f0 (hangul elements, letters & syllables)"
+      },
+      {
+        "nameID": 11,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "http://www.adobe.com/type/"
+      },
+      {
+        "nameID": 13,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL"
+      },
+      {
+        "nameID": 14,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "http://scripts.sil.org/OFL"
+      },
+      {
+        "nameID": 16,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Noto Sans SC"
+      },
+      {
+        "nameID": 17,
+        "platform": 3,
+        "encoding": 1,
+        "language": 1033,
+        "value": "Thin"
+      }
+    ]
+  }
+]

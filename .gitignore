@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+.kotlin/
+build/
+app/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local config（含 SDK 路径）
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 构建产物
+captures/
+
+# 本地 Android 模拟器、SDK 镜像及运行日志
+.android-test/
+
+# 交付产物和提交材料中的源码副本
+/dist/
+/提交包/源码/
+/提交包/安装包/
+校园生活+我爱练腿队+好奇训练/
+*.zip
+*.jks
+*.keystore
+.env
+.env.*
+__pycache__/
+.document-tools/
+/scripts/scan-submission.py
+/scripts/revise-submission-declaration.py
+/scripts/export-development-history.*

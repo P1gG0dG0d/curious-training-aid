@@ -1,0 +1,120 @@
+[
+  {
+    "coordinate": "androidx.lifecycle:lifecycle-runtime-compose:2.8.6",
+    "file": "lifecycle-runtime-compose-2.8.6.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.8.6/lifecycle-runtime-compose-2.8.6.pom",
+    "sha256": "45b6415664b2ff6324465683020545cca889201f35ac2b301583e3962ca2fb0d",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6",
+    "file": "lifecycle-viewmodel-compose-2.8.6.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose/2.8.6/lifecycle-viewmodel-compose-2.8.6.pom",
+    "sha256": "48ce64fbdbc592b0f286559dad69db621c74abcc9d6a906fe8c71366cb70d87d",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.room:room-ktx:2.6.1",
+    "file": "room-ktx-2.6.1.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/room/room-ktx/2.6.1/room-ktx-2.6.1.pom",
+    "sha256": "6017515ea6b0a4a9f50ebeee1e495e4c3492de69e9b49ea48e6a1234aa1e3945",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.room:room-compiler:2.6.1",
+    "file": "room-compiler-2.6.1.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/room/room-compiler/2.6.1/room-compiler-2.6.1.pom",
+    "sha256": "fb2d3ea1446fc131d8712df186520e175a2dfa7c99f924ce8a5d8f094c94196d",
+    "licenses": [
+      "The Apache Software License, Version 2.0",
+      "BSD licence"
+    ]
+  },
+  {
+    "coordinate": "org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.21",
+    "file": "compose-compiler-gradle-plugin-2.0.21.pom",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/compose-compiler-gradle-plugin/2.0.21/compose-compiler-gradle-plugin-2.0.21.pom",
+    "sha256": "f416fafa299f105665381d45dc23cb752eac197033cbbb0e7eb3f833409badf1",
+    "licenses": [
+      "The Apache License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "org.hamcrest:hamcrest-parent:1.3",
+    "file": "hamcrest-parent-1.3.pom",
+    "url": "https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest-parent/1.3/hamcrest-parent-1.3.pom",
+    "sha256": "6d535f94efb663bdb682c9f27a50335394688009642ba7a9677504bc1be4129b",
+    "licenses": [
+      "New BSD License"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.ui:ui:1.7.3",
+    "file": "ui-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui/1.7.3/ui-1.7.3.pom",
+    "sha256": "a7e1ab9aafc73a134efc78477c29f2b1d685f26f9b0953168e16150cbc5e96ac",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.ui:ui-graphics:1.7.3",
+    "file": "ui-graphics-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-graphics/1.7.3/ui-graphics-1.7.3.pom",
+    "sha256": "8311ac26dcee5d6d1f1ed388477e86d2fba35ecc6adafe6f47b0dae4722fada7",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.ui:ui-tooling-preview:1.7.3",
+    "file": "ui-tooling-preview-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-tooling-preview/1.7.3/ui-tooling-preview-1.7.3.pom",
+    "sha256": "46f2d31b2f960223a272051f8264a19b0089f39b786afb40642de2a6a6d4c347",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.material3:material3:1.3.0",
+    "file": "material3-1.3.0.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/material3/material3/1.3.0/material3-1.3.0.pom",
+    "sha256": "18fc6f20b0cc456954df76640f79642d6d7078680be9d11930d856168c9070f0",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.material:material-icons-extended:1.7.3",
+    "file": "material-icons-extended-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/material/material-icons-extended/1.7.3/material-icons-extended-1.7.3.pom",
+    "sha256": "e88b78d25b9a53d2c5527ef7f4cb37bd057c742b1e796cd8eef8446c53d80244",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.ui:ui-tooling:1.7.3",
+    "file": "ui-tooling-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-tooling/1.7.3/ui-tooling-1.7.3.pom",
+    "sha256": "6629474965cd4d8deb28999c5752f48586f2ec058e7454cd6a21c218e93925ac",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  },
+  {
+    "coordinate": "androidx.compose.ui:ui-test-manifest:1.7.3",
+    "file": "ui-test-manifest-1.7.3.pom",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-test-manifest/1.7.3/ui-test-manifest-1.7.3.pom",
+    "sha256": "61a6ef56b0fa8b8c4e3db85e6b3a7c9db7fd333168eda7c4177550aee1b7bdd6",
+    "licenses": [
+      "The Apache Software License, Version 2.0"
+    ]
+  }
+]
