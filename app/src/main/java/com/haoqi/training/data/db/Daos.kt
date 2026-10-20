@@ -56,6 +56,10 @@ interface TrainingDao {
     @Update
     suspend fun updateExercise(exercise: ExerciseEntity)
 
+    /** 长按拖动排序：只改这一条的顺序号，不碰组状态。 */
+    @Query("UPDATE exercises SET orderIndex = :orderIndex WHERE id = :id")
+    suspend fun updateExerciseOrder(id: Long, orderIndex: Int)
+
     @Update
     suspend fun updateSet(state: SetStateEntity)
 

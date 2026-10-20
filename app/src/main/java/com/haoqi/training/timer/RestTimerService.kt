@@ -48,6 +48,7 @@ class RestTimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var alertRingtone: Ringtone? = null
+    private var vibrator: Vibrator? = null
     private var endAtElapsed = 0L
     private var label = "休息"
     private var totalSeconds = 0
@@ -104,6 +105,15 @@ class RestTimerService : Service() {
                 (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
                 stopSelf()
             }
+
+            // 铃声还在响时把「休息结束」通知划掉：立即停止铃声和震动。
+            ACTION_DISMISS_ALERT -> {
+                stopAlertSound()
+                handler.removeCallbacksAndMessages(null)
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
+                stopSelf()
+            }
         }
         return START_NOT_STICKY
     }
@@ -114,10 +124,14 @@ class RestTimerService : Service() {
         _state.value = null
         vibrateAlert()
         playAlertSound()
-        // 保持前台状态 6 秒，避免系统回收服务导致铃声中断；
-        // 结束后 detach 通知（留在通知栏），再退出服务。
-        startForegroundSafe(buildFinished())
+        // 结束提醒必须是「可划掉的普通通知」：前台通知不允许被划掉，
+        // 所以先退出前台状态再发通知，用户划掉时 deleteIntent 才能停下铃声。
+        // 服务本身仍作为已启动服务存活到铃声结束，进程不会被立即回收。
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIF_ID, buildFinished())
         handler.postDelayed({
+            stopAlertSound()
             stopForegroundQuietly()
             stopSelf()
         }, ALERT_SOUND_MS + 500L)
@@ -177,6 +191,15 @@ class RestTimerService : Service() {
             .setContentText(label)
             .setAutoCancel(true)
             .setContentIntent(openAppIntent())
+            // 划掉通知 = 停止铃声和震动，不用再去按电源键
+            .setDeleteIntent(
+                PendingIntent.getService(
+                    this,
+                    REQUEST_DISMISS,
+                    Intent(this, RestTimerService::class.java).setAction(ACTION_DISMISS_ALERT),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            )
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
@@ -205,14 +228,15 @@ class RestTimerService : Service() {
     }
 
     private fun vibrateAlert() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
         } else {
             @Suppress("DEPRECATION")
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
+        vibrator = device
         val pattern = longArrayOf(0, 500, 200, 500, 200, 500, 200, 500)
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+        device.vibrate(VibrationEffect.createWaveform(pattern, -1))
     }
 
     private fun playAlertSound() {
@@ -233,6 +257,8 @@ class RestTimerService : Service() {
     private fun stopAlertSound() {
         alertRingtone?.stop()
         alertRingtone = null
+        vibrator?.cancel()
+        vibrator = null
     }
 
     private fun stopForegroundQuietly() {
@@ -258,12 +284,14 @@ class RestTimerService : Service() {
         private const val NOTIF_ID = 1001
         private const val REQUEST_SKIP = 11
         private const val REQUEST_OPEN = 12
+        private const val REQUEST_DISMISS = 13
         private const val EXTRA_SECONDS = "seconds"
         private const val EXTRA_LABEL = "label"
         private const val MAX_SECONDS = 3600
         private const val ALERT_SOUND_MS = 6000L
         const val ACTION_START = "com.haoqi.training.action.REST_START"
         const val ACTION_SKIP = "com.haoqi.training.action.REST_SKIP"
+        const val ACTION_DISMISS_ALERT = "com.haoqi.training.action.REST_DISMISS_ALERT"
 
         fun start(context: Context, seconds: Int, label: String) {
             createChannel(context)

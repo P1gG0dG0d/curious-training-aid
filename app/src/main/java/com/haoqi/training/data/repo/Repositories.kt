@@ -64,6 +64,15 @@ class TrainingRepository(private val db: AppDatabase) {
         dao.deleteExercise(exercise)
     }
 
+    /** 保存某一天的完整动作顺序（长按拖动结束后调用）。 */
+    suspend fun reorderExercises(dayId: Long, orderedIds: List<Long>) = db.withTransaction {
+        // 只接受属于这一天的动作，顺序号从 0 重排，避免和别天冲突
+        val ownIds = dao.getExercisesOfDay(dayId).map { it.id }.toSet()
+        orderedIds.filter { it in ownIds }.forEachIndexed { index, id ->
+            dao.updateExerciseOrder(id, index)
+        }
+    }
+
     /** 点一下组块：切换该组完成状态。 */
     suspend fun setSetDone(exerciseId: Long, setIndex: Int, done: Boolean) = db.withTransaction {
         dao.findSet(exerciseId, setIndex)?.let { dao.updateSet(it.copy(done = done)) }

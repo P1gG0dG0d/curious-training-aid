@@ -53,6 +53,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -90,6 +101,7 @@ fun TrainingScreen(
     onToggleSet: (ExerciseEntity, Int, Boolean) -> Unit,
     onToggleDayCompleted: (PlanDayEntity, Boolean) -> Unit,
     onRenameDay: (Long, String) -> Unit,
+    onReorderExercises: (Long, List<Long>) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -193,6 +205,7 @@ fun TrainingScreen(
                 onToggleSet = onToggleSet,
                 onToggleCompleted = { completed -> onToggleDayCompleted(day, completed) },
                 onRemoveDay = { confirmRemoveDay = true },
+                onReorder = { ids -> onReorderExercises(day.id, ids) },
             )
         }
     }
@@ -388,91 +401,164 @@ private fun DayPage(
     onToggleSet: (ExerciseEntity, Int, Boolean) -> Unit,
     onToggleCompleted: (Boolean) -> Unit,
     onRemoveDay: () -> Unit,
+    onReorder: (List<Long>) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp),
+    val haptics = LocalHapticFeedback.current
+    // 拖动时先改本地顺序让卡片跟手，松手后再写回数据库
+    var order by remember { mutableStateOf(exercises) }
+    var draggingId by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val heights = remember { mutableStateMapOf<Long, Int>() }
+
+    LaunchedEffect(exercises, draggingId) {
+        if (draggingId == null && exercises.map { it.id } != order.map { it.id }) {
+            order = exercises
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        GroupCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        day.displayName(),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    if (day.completed) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                contentDescription = null,
-                                tint = SuccessGreen,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                if (day.name.isBlank()) "循环第${day.dayIndex}天已练完" else "${day.name}已练完",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = SuccessGreen,
-                            )
+        item(key = "day-header") {
+            GroupCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            day.displayName(),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        if (day.completed) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SuccessGreen,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    if (day.name.isBlank()) "循环第${day.dayIndex}天已练完" else "${day.name}已练完",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SuccessGreen,
+                                )
+                            }
                         }
                     }
-                }
-                if (day.completed) {
-                    TextButton(onClick = { onToggleCompleted(false) }) { Text("撤销") }
-                } else {
-                    Button(
-                        onClick = { onToggleCompleted(true) },
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("完成")
+                    if (day.completed) {
+                        TextButton(onClick = { onToggleCompleted(false) }) { Text("撤销") }
+                    } else {
+                        Button(
+                            onClick = { onToggleCompleted(true) },
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("完成")
+                        }
                     }
                 }
             }
         }
 
         if (exercises.isEmpty()) {
-            GroupCard {
-                Text(
-                    "这一天还没有动作，点下方「添加动作」开始。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            item(key = "empty") {
+                GroupCard {
+                    Text(
+                        "这一天还没有动作，点下方「添加动作」开始。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        itemsIndexed(order, key = { _, exercise -> exercise.id }) { _, exercise ->
+            val isDragging = draggingId == exercise.id
+            Box(
+                modifier = Modifier
+                    .zIndex(if (isDragging) 1f else 0f)
+                    .graphicsLayer {
+                        if (isDragging) {
+                            translationY = dragOffset
+                            scaleX = 1.015f
+                            scaleY = 1.015f
+                            shadowElevation = 18.dp.toPx()
+                        }
+                    }
+                    // 被拖的卡片跟手移动，其余卡片用系统动画滑到新位置
+                    .then(if (isDragging) Modifier else Modifier.animateItem())
+                    .onGloballyPositioned { heights[exercise.id] = it.size.height }
+                    .pointerInput(exercise.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                draggingId = exercise.id
+                                dragOffset = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragOffset += amount.y
+                                val from = order.indexOfFirst { it.id == exercise.id }
+                                if (from >= 0) {
+                                    val ownHeight = heights[exercise.id] ?: 1
+                                    if (dragOffset > ownHeight / 2f && from < order.lastIndex) {
+                                        val next = order[from + 1]
+                                        order = order.toMutableList().apply { add(from + 1, removeAt(from)) }
+                                        dragOffset -= (heights[next.id] ?: ownHeight)
+                                    } else if (dragOffset < -ownHeight / 2f && from > 0) {
+                                        val previous = order[from - 1]
+                                        order = order.toMutableList().apply { add(from - 1, removeAt(from)) }
+                                        dragOffset += (heights[previous.id] ?: ownHeight)
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                draggingId = null
+                                dragOffset = 0f
+                                onReorder(order.map { it.id })
+                            },
+                            onDragCancel = {
+                                draggingId = null
+                                dragOffset = 0f
+                                order = exercises
+                            },
+                        )
+                    },
+            ) {
+                ExerciseCard(
+                    exercise = exercise,
+                    doneSets = doneSetsByExercise[exercise.id].orEmpty(),
+                    onToggleSet = { index, wasDone -> onToggleSet(exercise, index, wasDone) },
+                    onEdit = { onEditExercise(exercise) },
                 )
             }
         }
 
-        exercises.forEach { exercise ->
-            ExerciseCard(
-                exercise = exercise,
-                doneSets = doneSetsByExercise[exercise.id].orEmpty(),
-                onToggleSet = { index, wasDone -> onToggleSet(exercise, index, wasDone) },
-                onEdit = { onEditExercise(exercise) },
-            )
+        item(key = "add-exercise") {
+            OutlinedButton(
+                onClick = onAddExercise,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("添加动作")
+            }
         }
 
-        OutlinedButton(
-            onClick = onAddExercise,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .height(48.dp),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("添加动作")
+        item(key = "remove-day") {
+            TextButton(
+                onClick = onRemoveDay,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            ) { Text("删除这一天") }
         }
-
-        TextButton(
-            onClick = onRemoveDay,
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-        ) { Text("删除这一天") }
     }
 }
 

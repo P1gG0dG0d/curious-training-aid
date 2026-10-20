@@ -90,6 +90,11 @@ class TrainingViewModel(private val repo: TrainingRepository) : ViewModel() {
         viewModelScope.launch { repo.renameDay(dayId, name) }
     }
 
+    /** 长按拖动后保存新的动作顺序。 */
+    fun reorderExercises(dayId: Long, orderedIds: List<Long>) {
+        viewModelScope.launch { repo.reorderExercises(dayId, orderedIds) }
+    }
+
     fun setDayCompleted(dayId: Long, completed: Boolean) {
         viewModelScope.launch { repo.setDayCompleted(dayId, completed) }
     }

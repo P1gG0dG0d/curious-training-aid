@@ -185,6 +185,7 @@ private fun AppRoot() {
                     onSelectDay = trainingViewModel::selectDay,
                     onAddDay = trainingViewModel::addDay,
                     onRenameDay = trainingViewModel::renameDay,
+                    onReorderExercises = trainingViewModel::reorderExercises,
                     onRemoveDay = trainingViewModel::removeSelectedDay,
                     onSaveExercise = trainingViewModel::saveExercise,
                     onDeleteExercise = trainingViewModel::deleteExercise,
