@@ -483,7 +483,6 @@ private fun ExerciseCard(
     onToggleSet: (index: Int, wasDone: Boolean) -> Unit,
     onEdit: () -> Unit,
 ) {
-    val doneCount = doneSets.size
     val allDone = TrainingLogic.allSetsDone(doneSets, exercise.setCount)
     GroupCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -549,15 +548,6 @@ private fun ExerciseCard(
         ) {
             PartChip("重量", TrainingLogic.weightLabel(exercise.weightKg), Modifier.weight(1f))
             PartChip("次数", TrainingLogic.repsLabel(exercise.reps), Modifier.weight(1f))
-        }
-
-        if (allDone && doneCount == exercise.setCount) {
-            Text(
-                "全部组已完成，记得点上方「完成」",
-                style = MaterialTheme.typography.labelSmall,
-                color = SuccessGreen,
-                modifier = Modifier.padding(top = 8.dp),
-            )
         }
     }
 }
