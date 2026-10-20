@@ -95,6 +95,8 @@ fun GroupCard(
     modifier: Modifier = Modifier,
     contentPadding: androidx.compose.foundation.layout.PaddingValues =
         androidx.compose.foundation.layout.PaddingValues(16.dp),
+    /** 拖动抬起时给卡片本体加阴影：由 Surface 按圆角形状绘制，不会出现方形硬边。 */
+    shadowElevation: androidx.compose.ui.unit.Dp = 0.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
@@ -102,7 +104,7 @@ fun GroupCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 0.dp,
+        shadowElevation = shadowElevation,
     ) {
         Column(Modifier.padding(contentPadding), content = content)
     }

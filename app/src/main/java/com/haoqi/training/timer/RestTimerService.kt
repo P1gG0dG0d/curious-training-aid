@@ -66,8 +66,9 @@ class RestTimerService : Service() {
             if (remaining != lastShownSeconds) {
                 lastShownSeconds = remaining
                 _state.value = RestTimerState(label, remaining, totalSeconds)
-                // 通知栏用系统计时器（chronometer）自己走秒，不再每秒 notify：
-                // 部分机型（如 HyperOS）会限流后台应用的重复通知更新，导致切出去后数字卡住。
+                // 文字倒计时照常每秒刷新；部分机型不显示系统计时器（chronometer），
+                // 只靠它会出现「通知里看不到具体时间」的问题，所以两条路都留着。
+                notifyOngoing(remaining)
             }
             handler.postDelayed(this, 200L)
         }
@@ -151,12 +152,16 @@ class RestTimerService : Service() {
         }
     }
 
+    private fun notifyOngoing(remaining: Int) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIF_ID, buildOngoing(remaining))
+    }
+
     /**
-     * 倒计时交给系统计时器渲染：
-     *  - setUsesChronometer + setChronometerCountDown：由 SystemUI 每秒刷新，
-     *    应用被后台限流或进程被挂起时数字也不会停；
-     *  - setWhen 设为「现在 + 剩余秒数」作为倒计时基准；
-     *  - FOREGROUND_SERVICE_IMMEDIATE：避免部分机型延迟展示前台通知。
+     * 倒计时同时用两种方式展示：
+     *  - 正文「剩余 X」每秒刷新（所有机型都能看到具体时间）；
+     *  - setUsesChronometer + setChronometerCountDown 让 SystemUI 自己走秒，
+     *    后台被限流、文字更新被丢弃时数字仍然会动。
      */
     private fun buildOngoing(remaining: Int): Notification {
         val skipIntent = PendingIntent.getService(
@@ -168,7 +173,7 @@ class RestTimerService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("休息中 · $label")
-            .setContentText("共 ${formatDuration(totalSeconds)}，点此通知可回到 App")
+            .setContentText("剩余 ${formatDuration(remaining)}")
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
             .setWhen(System.currentTimeMillis() + remaining * 1000L)

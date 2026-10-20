@@ -411,9 +411,9 @@ private fun DayPage(
     val heights = remember { mutableStateMapOf<Long, Int>() }
 
     LaunchedEffect(exercises, draggingId) {
-        if (draggingId == null && exercises.map { it.id } != order.map { it.id }) {
-            order = exercises
-        }
+        // 只要没在拖动，就用数据库里的最新数据覆盖本地顺序：
+        // 之前只比较 id，编辑重量/组数/名称后 id 不变，卡片会一直显示旧值。
+        if (draggingId == null) order = exercises
     }
 
     LazyColumn(
@@ -484,7 +484,6 @@ private fun DayPage(
                             translationY = dragOffset
                             scaleX = 1.015f
                             scaleY = 1.015f
-                            shadowElevation = 18.dp.toPx()
                         }
                     }
                     // 被拖的卡片跟手移动，其余卡片用系统动画滑到新位置
@@ -532,6 +531,7 @@ private fun DayPage(
                     doneSets = doneSetsByExercise[exercise.id].orEmpty(),
                     onToggleSet = { index, wasDone -> onToggleSet(exercise, index, wasDone) },
                     onEdit = { onEditExercise(exercise) },
+                    lifted = isDragging,
                 )
             }
         }
@@ -568,9 +568,10 @@ private fun ExerciseCard(
     doneSets: Set<Int>,
     onToggleSet: (index: Int, wasDone: Boolean) -> Unit,
     onEdit: () -> Unit,
+    lifted: Boolean = false,
 ) {
     val allDone = TrainingLogic.allSetsDone(doneSets, exercise.setCount)
-    GroupCard {
+    GroupCard(shadowElevation = if (lifted) 12.dp else 0.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(exercise.name, style = MaterialTheme.typography.titleMedium)
