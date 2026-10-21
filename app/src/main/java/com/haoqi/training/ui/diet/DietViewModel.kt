@@ -216,8 +216,8 @@ class DietViewModel(
     }
 
     /**
-     * 手动/编辑弹窗里改了名称或份量、且用户没自己动过营养数据时，按「名称 + 份量」估算。
-     * 内部去抖 800ms，避免每敲一个字都发一次请求。
+     * 手动/编辑弹窗点「保存」时调用一次：按「名称 + 份量」估算营养后入账。
+     * 只在用户没自己改过营养数字时由界面触发。
      */
     fun estimateMacros(name: String, portion: String) {
         estimateJob?.cancel()
@@ -233,7 +233,6 @@ class DietViewModel(
         }
         macrosEstimate.value = MacrosEstimate.Loading
         estimateJob = viewModelScope.launch {
-            delay(800)
             client.estimateMacros(config, trimmedName, portion)
                 .onSuccess { macrosEstimate.value = MacrosEstimate.Done(it) }
                 .onFailure { error ->

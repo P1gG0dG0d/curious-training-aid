@@ -653,28 +653,44 @@ private fun ManualFoodDialog(
     var fat by remember { mutableStateOf(initial?.fat?.let { formatNumber(it) } ?: "") }
     var carbs by remember { mutableStateOf(initial?.carbs?.let { formatNumber(it) } ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
-    // 用户一旦自己改过热量/营养，就不再自动覆盖
+    // 用户一旦自己改过热量/营养，就不再自动估算覆盖
     var numbersEdited by remember { mutableStateOf(false) }
-    var autoFilled by remember { mutableStateOf(false) }
+    // 点保存后等 AI 结果再入账
+    var pendingSave by remember { mutableStateOf(false) }
+    val initialName = initial?.name ?: ""
+    val initialPortion = initial?.portion ?: "1 份"
+    val nameOrPortionChanged = name.trim() != initialName.trim() || portion.trim() != initialPortion.trim()
 
-    // 名称或份量变化 → 让 AI 重新估算（去抖在处理层）
-    LaunchedEffect(name, portion, numbersEdited) {
-        if (numbersEdited) return@LaunchedEffect
-        if (name.isBlank()) {
-            onClearEstimate()
-        } else {
-            onRequestEstimate(name, portion)
+    // 只有「保存」时才估算：拿到结果就直接入账
+    LaunchedEffect(estimate, pendingSave) {
+        if (!pendingSave) return@LaunchedEffect
+        when (estimate) {
+            is MacrosEstimate.Done -> {
+                pendingSave = false
+                val draft = estimate.draft
+                if (draft.kcal <= 0f) {
+                    error = "估算出的热量为 0，请手动填写"
+                } else {
+                    onSave(
+                        FoodDraft(
+                            name = name.trim(),
+                            portion = portion.trim().ifBlank { "1 份" },
+                            kcal = draft.kcal,
+                            protein = draft.protein,
+                            fat = draft.fat,
+                            carbs = draft.carbs,
+                        )
+                    )
+                }
+            }
+
+            is MacrosEstimate.Unavailable -> {
+                pendingSave = false
+                error = "自动估算失败：${estimate.message}"
+            }
+
+            else -> Unit
         }
-    }
-
-    LaunchedEffect(estimate) {
-        val done = estimate as? MacrosEstimate.Done ?: return@LaunchedEffect
-        if (numbersEdited) return@LaunchedEffect
-        kcal = formatNumber(done.draft.kcal)
-        protein = formatNumber(done.draft.protein)
-        fat = formatNumber(done.draft.fat)
-        carbs = formatNumber(done.draft.carbs)
-        autoFilled = true
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -725,31 +741,31 @@ private fun ManualFoodDialog(
                 // 固定一行高度的提示：状态切换时不让弹窗高度跳动
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().heightIn(min = 20.dp)) {
-                    when (estimate) {
-                        is MacrosEstimate.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    when {
+                        estimate is MacrosEstimate.Loading || pendingSave -> Row(verticalAlignment = Alignment.CenterVertically) {
                             ThinkingDots()
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "正在按名称和份量估算…",
+                                "正在估算营养并保存…",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
 
-                        is MacrosEstimate.Done -> Text(
-                            if (autoFilled) "已按名称和份量自动填入，可直接修改" else "改了名称或份量会重新估算",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        is MacrosEstimate.Unavailable -> Text(
+                        estimate is MacrosEstimate.Unavailable -> Text(
                             "未自动估算：${estimate.message}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        MacrosEstimate.Idle -> Text(
-                            "改了名称或份量会自动估算热量与营养",
+                        numbersEdited -> Text(
+                            "已按你填的数字保存，不再自动估算",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        else -> Text(
+                            "改了名称或份量后，保存时会自动估算一次营养",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -767,7 +783,14 @@ private fun ManualFoodDialog(
                         onClick = {
                             when {
                                 name.isBlank() -> error = "请填写食物名称"
-                                (kcal.toFloatOrNull() ?: 0f) <= 0f -> error = "请填写热量"
+                                // 没自己填营养、且名称/份量有改动 → 保存时让 AI 估算一次
+                                !numbersEdited && nameOrPortionChanged -> {
+                                    error = null
+                                    onClearEstimate()
+                                    pendingSave = true
+                                    onRequestEstimate(name, portion)
+                                }
+                                (kcal.toFloatOrNull() ?: 0f) <= 0f -> error = "请填写热量（或让 AI 自动估算）"
                                 else -> onSave(
                                     FoodDraft(
                                         name = name.trim(),
@@ -780,6 +803,7 @@ private fun ManualFoodDialog(
                                 )
                             }
                         },
+                        enabled = !pendingSave,
                         shape = RoundedCornerShape(12.dp),
                     ) { Text("保存") }
                 }

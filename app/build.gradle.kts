@@ -13,7 +13,7 @@ android {
         applicationId = "com.haoqi.training"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
+        versionCode = 16
         versionName = "0.2.9"
     }
 
