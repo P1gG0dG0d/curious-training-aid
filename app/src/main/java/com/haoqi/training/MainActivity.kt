@@ -113,6 +113,7 @@ private fun AppRoot() {
 
     val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
     val dietState by dietViewModel.uiState.collectAsStateWithLifecycle()
+    val dietEstimate by dietViewModel.foodEstimate.collectAsStateWithLifecycle()
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
     var tabName by rememberSaveable { mutableStateOf(AppTab.TRAINING.name) }
@@ -213,6 +214,9 @@ private fun AppRoot() {
                     onConfirmDrafts = dietViewModel::confirmDrafts,
                     onClearAiState = dietViewModel::clearAiState,
                     onSaveActivity = dietViewModel::saveActivity,
+                    foodEstimate = dietEstimate,
+                    onEstimateMacros = dietViewModel::estimateMacros,
+                    onClearEstimate = dietViewModel::clearEstimate,
                     onOpenSettings = { showSettings = true },
                     modifier = Modifier.padding(padding),
                 )

@@ -40,6 +40,14 @@ sealed interface AiState {
     data class Failed(val message: String) : AiState
 }
 
+/** 手动录入时按「名称 + 份量」估算营养的状态，与拍照识别互相独立。 */
+sealed interface MacrosEstimate {
+    data object Idle : MacrosEstimate
+    data object Loading : MacrosEstimate
+    data class Done(val draft: FoodDraft) : MacrosEstimate
+    data class Unavailable(val message: String) : MacrosEstimate
+}
+
 data class DietUiState(
     val date: String = LocalDate.now().toString(),
     val entries: List<FoodEntryEntity> = emptyList(),
@@ -77,6 +85,11 @@ class DietViewModel(
     private val aiState = MutableStateFlow<AiState>(AiState.Idle)
     private var analyzeJob: Job? = null
     private val client = DeepSeekClient()
+
+    /** 手动录入里「名称/份量变了就重新估算营养」的状态与去抖任务。 */
+    private val macrosEstimate = MutableStateFlow<MacrosEstimate>(MacrosEstimate.Idle)
+    val foodEstimate: StateFlow<MacrosEstimate> = macrosEstimate
+    private var estimateJob: Job? = null
 
     private val message = MutableStateFlow<String?>(null)
     val uiState: StateFlow<DietUiState> = selectedDate.flatMapLatest { day ->
@@ -200,5 +213,38 @@ class DietViewModel(
     fun clearAiState() {
         analyzeJob?.cancel()
         aiState.value = AiState.Idle
+    }
+
+    /**
+     * 手动/编辑弹窗里改了名称或份量、且用户没自己动过营养数据时，按「名称 + 份量」估算。
+     * 内部去抖 800ms，避免每敲一个字都发一次请求。
+     */
+    fun estimateMacros(name: String, portion: String) {
+        estimateJob?.cancel()
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            macrosEstimate.value = MacrosEstimate.Idle
+            return
+        }
+        val config = apiConfigStore.config.value
+        if (!config.isConfigured) {
+            macrosEstimate.value = MacrosEstimate.Unavailable("未配置 AI，无法自动估算，请手动填写")
+            return
+        }
+        macrosEstimate.value = MacrosEstimate.Loading
+        estimateJob = viewModelScope.launch {
+            delay(800)
+            client.estimateMacros(config, trimmedName, portion)
+                .onSuccess { macrosEstimate.value = MacrosEstimate.Done(it) }
+                .onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    macrosEstimate.value = MacrosEstimate.Unavailable(error.message ?: "估算失败，请手动填写")
+                }
+        }
+    }
+
+    fun clearEstimate() {
+        estimateJob?.cancel()
+        macrosEstimate.value = MacrosEstimate.Idle
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -99,6 +100,9 @@ fun DietScreen(
     onConfirmDrafts: (String, MealType, List<FoodDraft>) -> Unit,
     onClearAiState: () -> Unit,
     onSaveActivity: (String, Float) -> Unit,
+    foodEstimate: MacrosEstimate,
+    onEstimateMacros: (String, String) -> Unit,
+    onClearEstimate: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -258,11 +262,15 @@ fun DietScreen(
     manualMeal?.let { meal ->
         ManualFoodDialog(
             meal = meal,
-            onDismiss = { manualMeal = null },
+            onDismiss = { manualMeal = null; onClearEstimate() },
             onSave = { draft ->
                 onAddFood(editorDate, meal, draft.name, draft.portion, draft.kcal, draft.protein, draft.fat, draft.carbs, false)
                 manualMeal = null
+                onClearEstimate()
             },
+            estimate = foodEstimate,
+            onRequestEstimate = onEstimateMacros,
+            onClearEstimate = onClearEstimate,
         )
     }
 
@@ -271,7 +279,10 @@ fun DietScreen(
             meal = MealType.entries.firstOrNull { it.name == entry.meal } ?: MealType.LUNCH,
             isEditing = true,
             initial = FoodDraft(entry.name, entry.portion, entry.kcal, entry.protein, entry.fat, entry.carbs),
-            onDismiss = { editingEntry = null },
+            onDismiss = { editingEntry = null; onClearEstimate() },
+            estimate = foodEstimate,
+            onRequestEstimate = onEstimateMacros,
+            onClearEstimate = onClearEstimate,
             onSave = { draft ->
                 onUpdateEntry(
                     entry.copy(
@@ -284,6 +295,7 @@ fun DietScreen(
                     )
                 )
                 editingEntry = null
+                onClearEstimate()
             },
         )
     }
@@ -630,6 +642,9 @@ private fun ManualFoodDialog(
     onSave: (FoodDraft) -> Unit,
     initial: FoodDraft? = null,
     isEditing: Boolean = false,
+    estimate: MacrosEstimate = MacrosEstimate.Idle,
+    onRequestEstimate: (String, String) -> Unit = { _, _ -> },
+    onClearEstimate: () -> Unit = {},
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var portion by remember { mutableStateOf(initial?.portion ?: "1 份") }
@@ -638,6 +653,29 @@ private fun ManualFoodDialog(
     var fat by remember { mutableStateOf(initial?.fat?.let { formatNumber(it) } ?: "") }
     var carbs by remember { mutableStateOf(initial?.carbs?.let { formatNumber(it) } ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
+    // 用户一旦自己改过热量/营养，就不再自动覆盖
+    var numbersEdited by remember { mutableStateOf(false) }
+    var autoFilled by remember { mutableStateOf(false) }
+
+    // 名称或份量变化 → 让 AI 重新估算（去抖在处理层）
+    LaunchedEffect(name, portion, numbersEdited) {
+        if (numbersEdited) return@LaunchedEffect
+        if (name.isBlank()) {
+            onClearEstimate()
+        } else {
+            onRequestEstimate(name, portion)
+        }
+    }
+
+    LaunchedEffect(estimate) {
+        val done = estimate as? MacrosEstimate.Done ?: return@LaunchedEffect
+        if (numbersEdited) return@LaunchedEffect
+        kcal = formatNumber(done.draft.kcal)
+        protein = formatNumber(done.draft.protein)
+        fat = formatNumber(done.draft.fat)
+        carbs = formatNumber(done.draft.carbs)
+        autoFilled = true
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface) {
@@ -668,7 +706,10 @@ private fun ManualFoodDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     KeyboardGuardTextField(
                         value = kcal,
-                        onValueChange = { kcal = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
+                        onValueChange = {
+                            numbersEdited = true
+                            kcal = it.filter { c -> c.isDigit() || c == '.' }.take(5)
+                        },
                         label = { Text("热量 kcal") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
@@ -677,9 +718,42 @@ private fun ManualFoodDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumberField("蛋白质 g", protein, { protein = it }, Modifier.weight(1f))
-                    NumberField("碳水 g", carbs, { carbs = it }, Modifier.weight(1f))
-                    NumberField("脂肪 g", fat, { fat = it }, Modifier.weight(1f))
+                    NumberField("蛋白质 g", protein, { numbersEdited = true; protein = it }, Modifier.weight(1f))
+                    NumberField("碳水 g", carbs, { numbersEdited = true; carbs = it }, Modifier.weight(1f))
+                    NumberField("脂肪 g", fat, { numbersEdited = true; fat = it }, Modifier.weight(1f))
+                }
+                // 固定一行高度的提示：状态切换时不让弹窗高度跳动
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().heightIn(min = 20.dp)) {
+                    when (estimate) {
+                        is MacrosEstimate.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            ThinkingDots()
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "正在按名称和份量估算…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        is MacrosEstimate.Done -> Text(
+                            if (autoFilled) "已按名称和份量自动填入，可直接修改" else "改了名称或份量会重新估算",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        is MacrosEstimate.Unavailable -> Text(
+                            "未自动估算：${estimate.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        MacrosEstimate.Idle -> Text(
+                            "改了名称或份量会自动估算热量与营养",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 error?.let {
                     Spacer(Modifier.height(8.dp))

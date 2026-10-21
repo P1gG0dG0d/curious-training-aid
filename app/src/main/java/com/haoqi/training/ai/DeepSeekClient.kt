@@ -237,12 +237,67 @@ class DeepSeekClient {
         Result.failure(e.toAiException())
     }
 
+    /**
+     * 只有食物名称和份量（没有照片）时，让模型估算热量与三大营养素。
+     * 用于手动录入里改了名称/份量后自动回填，返回值把多项求和合并成一条。
+     */
+    suspend fun estimateMacros(
+        config: ApiConfig,
+        foodName: String,
+        portion: String,
+    ): Result<FoodDraft> = withContext(Dispatchers.IO) {
+        resultOf {
+            requireConfigured(config)
+            if (foodName.isBlank()) throw AiException("请先填写食物名称")
+            val body = JSONObject().apply {
+                put("model", config.model)
+                put("thinking", JSONObject().put("type", "disabled"))
+                put("max_tokens", 800)
+                put(
+                    "messages",
+                    JSONArray().put(
+                        JSONObject().apply {
+                            put("role", "user")
+                            put("content", TEXT_PROMPT.format(foodName.trim(), portion.trim().ifBlank { "1 份" }))
+                        }
+                    )
+                )
+            }
+            val drafts = FoodJsonParser.parse(postChatCompletions(config, body))
+            if (drafts.isEmpty()) throw AiException("没估算出营养数据，请手动填写")
+            val merged = drafts.reduce { a, b ->
+                a.copy(
+                    kcal = a.kcal + b.kcal,
+                    protein = a.protein + b.protein,
+                    fat = a.fat + b.fat,
+                    carbs = a.carbs + b.carbs,
+                )
+            }.copy(name = foodName.trim(), portion = portion.trim().ifBlank { "1 份" })
+            // 模型偶尔会吐出离谱数值（比如把示例里的数字也加起来），超出常识就不采用
+            val sane = merged.kcal in 0f..10_000f &&
+                merged.protein in 0f..1_000f &&
+                merged.fat in 0f..1_000f &&
+                merged.carbs in 0f..2_000f
+            if (!sane) throw AiException("估算结果不合理，请手动填写")
+            merged
+        }
+    }
+
     private companion object {
         val PROMPT = """
             你是一名营养师。请看这张食物照片，估算每种食物的份量和营养。
             只输出 JSON，不要输出任何解释。格式：
             {"foods":[{"name":"米饭","portion":"150g","kcal":174,"protein":3.8,"fat":0.4,"carbs":38.8}]}
             数值单位：热量 kcal、蛋白质/脂肪/碳水为克。识别不到食物时输出 {"foods":[]}。
+        """.trimIndent()
+
+        val TEXT_PROMPT = """
+            你是一名营养师。请按下面的食物名称和份量估算营养，不要编造超出常识的极端数值。
+            只输出 JSON，不要输出任何解释。格式：
+            {"foods":[{"name":"米饭","portion":"150g","kcal":174,"protein":3.8,"fat":0.4,"carbs":38.8}]}
+            数值单位：热量 kcal、蛋白质/脂肪/碳水为克。
+            食物名称：%s
+            份量：%s
         """.trimIndent()
     }
 }
