@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.Ringtone
@@ -49,6 +51,13 @@ class RestTimerService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var alertRingtone: Ringtone? = null
     private var vibrator: Vibrator? = null
+    private var screenWatcherRegistered = false
+
+    private val screenWatcher = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (alertRingtone != null || vibrator != null) silenceAndDismiss()
+        }
+    }
     private var endAtElapsed = 0L
     private var label = "休息"
     private var totalSeconds = 0
@@ -108,13 +117,7 @@ class RestTimerService : Service() {
             }
 
             // 铃声还在响时把「休息结束」通知划掉：立即停止铃声和震动。
-            ACTION_DISMISS_ALERT -> {
-                stopAlertSound()
-                handler.removeCallbacksAndMessages(null)
-                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
-                stopSelf()
-            }
+            ACTION_DISMISS_ALERT -> silenceAndDismiss()
         }
         return START_NOT_STICKY
     }
@@ -131,11 +134,42 @@ class RestTimerService : Service() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .notify(NOTIF_ID, buildFinished())
+        registerScreenWatcher()
         handler.postDelayed({
             stopAlertSound()
             stopForegroundQuietly()
             stopSelf()
         }, ALERT_SOUND_MS + 500L)
+    }
+
+    /**
+     * 响铃期间监听屏幕亮/灭：按电源键会让屏幕状态翻转（系统行为，App 拦不到电源键本身），
+     * 但可以在这一瞬间立刻静音并清掉通知，等于「按一下电源键就安静」。
+     */
+    private fun registerScreenWatcher() {
+        if (screenWatcherRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        // 系统广播，Android 13+ 也要显式声明导出策略
+        ContextCompat.registerReceiver(this, screenWatcher, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        screenWatcherRegistered = true
+    }
+
+    private fun unregisterScreenWatcher() {
+        if (!screenWatcherRegistered) return
+        runCatching { unregisterReceiver(screenWatcher) }
+        screenWatcherRegistered = false
+    }
+
+    /** 静音 + 移掉结束通知 + 结束服务（划掉通知、按电源键、跳过都走这里）。 */
+    private fun silenceAndDismiss() {
+        stopAlertSound()
+        handler.removeCallbacksAndMessages(null)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
+        stopSelf()
     }
 
     /** Android 14 起显式传前台服务类型，避免特殊用途类型未生效被系统杀。 */
@@ -264,6 +298,7 @@ class RestTimerService : Service() {
         alertRingtone = null
         vibrator?.cancel()
         vibrator = null
+        unregisterScreenWatcher()
     }
 
     private fun stopForegroundQuietly() {
