@@ -60,7 +60,7 @@ fun CalorieBars(
     val intakeFraction by animateFloatAsState(intakeTarget, tween(500, easing = FastOutSlowInEasing), label = "intake")
     val lineFraction by animateFloatAsState(lineTarget, tween(500, easing = FastOutSlowInEasing), label = "line")
 
-    Canvas(modifier = modifier.fillMaxWidth().height(88.dp)) {
+    Canvas(modifier = modifier.fillMaxWidth().height(72.dp)) {
         val barHeight = 24.dp.toPx()
         val corner = CornerRadius(barHeight / 2)
         val topY = 6.dp.toPx()

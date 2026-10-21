@@ -157,7 +157,13 @@ fun DietScreen(
         SectionLabel(state.date)
         GroupCard {
             Text("今日活动消耗", style = MaterialTheme.typography.titleLarge)
-            Text("仅保存到 ${state.date}，新一天默认 0", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "只记在今天（${state.date}），新的一天从 0 开始",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
             KeyboardGuardTextField(
                 value = activityText,
                 onValueChange = { activityText = it },
@@ -166,12 +172,26 @@ fun DietScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (activityValue == null || !DailyDiet.validActivity(activityValue)) {
+                Spacer(Modifier.height(6.dp))
                 Text("请输入非负有限数字", color = DangerRed, style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = { activityValue?.let { onSaveActivity(state.date, it) } },
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = { activityValue?.let { onSaveActivity(state.date, it) } },
                 enabled = activityValue != null && DailyDiet.validActivity(activityValue),
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("保存今日活动消耗") }
-            state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) { Text("保存今日活动消耗") }
+            state.message?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         CalorieGroupCard(state)
 
@@ -284,43 +304,41 @@ fun DietScreen(
 @Composable
 private fun CalorieGroupCard(state: DietUiState) {
     GroupCard {
+        Text("今日热量", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(10.dp))
+
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("今日热量", style = MaterialTheme.typography.titleLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dot(BarExpenditure)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "总消耗 ${state.expenditureKcal.toInt()} kcal",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Dot(BarIntake)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "摄入 ${state.totalKcal.toInt()} kcal",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            Dot(BarExpenditure)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "总消耗 ${state.expenditureKcal.toInt()} kcal",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(20.dp))
+            Dot(BarIntake)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "摄入 ${state.totalKcal.toInt()} kcal",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Text("基础代谢 ${state.bmrKcal?.toInt()?.toString() ?: "未配置"} + 今日活动 ${state.activityKcal.toInt()} kcal", style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.height(12.dp))
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "基础代谢 ${state.bmrKcal?.toInt()?.toString() ?: "未配置"} + 今日活动 ${state.activityKcal.toInt()} kcal",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Spacer(Modifier.height(20.dp))
         CalorieBars(
             expenditureKcal = state.expenditureKcal,
             intakeKcal = state.totalKcal,
         )
-        Spacer(Modifier.height(10.dp))
-        val delta = state.expenditureKcal - state.totalKcal
-        val differenceText = "消耗摄入差为：${delta.toInt()} 千卡（消耗 − 摄入）"
-        val overTarget = CalorieChartMath.isAtLeastTarget(state.expenditureKcal, state.totalKcal)
-        val statusText = when {
-            state.bmrKcal == null -> "基础代谢未配置：当前仅含今日活动消耗，请到设置保存个人资料"
-            overTarget -> "已达到 500 千卡目标\n$differenceText"
-            else -> "未达到 500 千卡目标\n$differenceText"
-        }
+
+        Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
@@ -335,12 +353,30 @@ private fun CalorieGroupCard(state: DietUiState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            statusText,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (overTarget) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+
+        Spacer(Modifier.height(14.dp))
+        val delta = state.expenditureKcal - state.totalKcal
+        val differenceText = "消耗摄入差为：${delta.toInt()} 千卡（消耗 − 摄入）"
+        val overTarget = CalorieChartMath.isAtLeastTarget(state.expenditureKcal, state.totalKcal)
+        if (state.bmrKcal == null) {
+            Text(
+                "基础代谢未配置：当前只算今日活动消耗，去「设置」保存个人资料即可",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                if (overTarget) "已达到 500 千卡目标" else "未达到 500 千卡目标",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (overTarget) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                differenceText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
