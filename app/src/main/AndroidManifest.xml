@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- 休息倒计时需要持有唤醒锁，锁屏后仍能计时和响铃 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 休息结束用系统精确闹钟兜底：进程被系统杀掉后也能到点把服务拉起来响铃 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- 允许用户在设置里把 App 加入电池优化白名单，减少锁屏后被 HyperOS 等系统杀掉 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".App"

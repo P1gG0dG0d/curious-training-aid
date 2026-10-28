@@ -234,6 +234,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            BackgroundRunningCard()
         }
     }
 }

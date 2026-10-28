@@ -1,5 +1,6 @@
 package com.haoqi.training.timer
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,6 +11,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -22,6 +25,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -42,6 +46,10 @@ data class RestTimerState(
 /**
  * 组间休息倒计时前台服务：
  *  - 前台服务 + 通知栏倒计时，锁屏/切后台继续跑
+ *  - 结束时刻同时写进 SharedPreferences，并挂一个系统精确闹钟：
+ *    进程被系统杀掉也会由闹钟把服务拉起来响铃，不会「静悄悄错过」
+ *  - 通知栏的剩余时间用系统 Chronometer（RemoteViews）自己走秒，
+ *    不再每秒 notify，绕开 HyperOS 等 ROM 对后台通知更新的限流
  *  - 计时结束震动 + 响铃（走闹钟音量通道），并弹「休息结束」通知
  *  - 通知栏可直接「跳过休息」
  */
@@ -58,10 +66,16 @@ class RestTimerService : Service() {
             if (alertRingtone != null || vibrator != null) silenceAndDismiss()
         }
     }
+
+    /** 结束时刻（单调时钟，不受用户改系统时间影响）。 */
     private var endAtElapsed = 0L
+
+    /** 结束时刻（墙上时钟，只用于进程被杀后恢复）。 */
+    private var endAtWall = 0L
     private var label = "休息"
     private var totalSeconds = 0
     private var lastShownSeconds = -1
+    private var finished = false
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -75,11 +89,10 @@ class RestTimerService : Service() {
             if (remaining != lastShownSeconds) {
                 lastShownSeconds = remaining
                 _state.value = RestTimerState(label, remaining, totalSeconds)
-                // 文字倒计时照常每秒刷新；部分机型不显示系统计时器（chronometer），
-                // 只靠它会出现「通知里看不到具体时间」的问题，所以两条路都留着。
-                notifyOngoing(remaining)
+                // 通知栏不再每秒 notify：
+                // 剩余时间由系统 Chronometer 自己走秒，后台限流也不会冻结数字。
             }
-            handler.postDelayed(this, 200L)
+            handler.postDelayed(this, TICK_MS)
         }
     }
 
@@ -89,51 +102,125 @@ class RestTimerService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val seconds = intent.getIntExtra(EXTRA_SECONDS, 60).coerceIn(0, MAX_SECONDS)
-                label = intent.getStringExtra(EXTRA_LABEL) ?: "休息"
                 if (seconds <= 0) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                totalSeconds = seconds
-                endAtElapsed = SystemClock.elapsedRealtime() + seconds * 1000L
-                lastShownSeconds = -1
-                stopAlertSound()
-                acquireWakeLock(seconds)
-                // 清掉上一轮（可能还在响铃/等待退出）的所有回调
-                handler.removeCallbacksAndMessages(null)
-                startForegroundSafe(buildOngoing(seconds))
-                _state.value = RestTimerState(label, seconds, seconds)
-                handler.post(tickRunnable)
+                startTimer(seconds, intent.getStringExtra(EXTRA_LABEL) ?: "休息")
+            }
+
+            // 系统闹钟到点：可能是在进程被杀之后把服务拉起来，先满足前台要求再收尾。
+            ACTION_ALARM_FIRE -> {
+                if (!restoreIfNeeded()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                startForegroundSafe(buildOngoing())
+                handler.removeCallbacks(tickRunnable)
+                if (endAtElapsed - SystemClock.elapsedRealtime() > ALARM_EARLY_TOLERANCE_MS) {
+                    // 闹钟提前触发（例如用户改了系统时间）：继续正常走秒
+                    scheduleEndAlarm()
+                    handler.post(tickRunnable)
+                } else {
+                    finishRest()
+                }
+            }
+
+            // 进程被杀后重建（START_STICKY）或回到 App 时对账
+            ACTION_SYNC, null -> {
+                if (endAtElapsed > 0L && !finished &&
+                    endAtElapsed - SystemClock.elapsedRealtime() > 0L
+                ) {
+                    // 已经在计时，不重复启动
+                    return START_STICKY
+                }
+                if (!restoreIfNeeded()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                val remainingMs = endAtElapsed - SystemClock.elapsedRealtime()
+                if (remainingMs <= 0L) {
+                    startForegroundSafe(buildOngoing())
+                    finishRest()
+                } else {
+                    acquireWakeLock(remainingMs)
+                    scheduleEndAlarm()
+                    startForegroundSafe(buildOngoing())
+                    _state.value = RestTimerState(
+                        label,
+                        RestTimerMath.remainingSeconds(remainingMs),
+                        totalSeconds,
+                    )
+                    handler.removeCallbacks(tickRunnable)
+                    handler.post(tickRunnable)
+                }
             }
 
             ACTION_SKIP -> {
                 handler.removeCallbacksAndMessages(null)
                 stopAlertSound()
                 releaseWakeLock()
+                cancelEndAlarm()
+                RestTimerStore.clear(this)
                 _state.value = null
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
+                notificationManager().cancel(NOTIF_ID)
                 stopSelf()
             }
 
             // 铃声还在响时把「休息结束」通知划掉：立即停止铃声和震动。
             ACTION_DISMISS_ALERT -> silenceAndDismiss()
         }
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun startTimer(seconds: Int, exerciseLabel: String) {
+        label = exerciseLabel
+        totalSeconds = seconds
+        endAtWall = System.currentTimeMillis() + seconds * 1000L
+        endAtElapsed = SystemClock.elapsedRealtime() + seconds * 1000L
+        lastShownSeconds = -1
+        finished = false
+        stopAlertSound()
+        acquireWakeLock(seconds * 1000L)
+        RestTimerStore.save(this, endAtWall, totalSeconds, label)
+        scheduleEndAlarm()
+        // 清掉上一轮（可能还在响铃/等待退出）的所有回调
+        handler.removeCallbacksAndMessages(null)
+        startForegroundSafe(buildOngoing())
+        _state.value = RestTimerState(label, seconds, seconds)
+        handler.post(tickRunnable)
+    }
+
+    private fun restoreIfNeeded(): Boolean {
+        if (endAtElapsed > 0L && !finished) return true
+        val snapshot = RestTimerStore.load(this) ?: return false
+        label = snapshot.label
+        totalSeconds = snapshot.totalSeconds
+        endAtWall = snapshot.endWallMillis
+        // 用墙上时钟重算剩余时间，并夹在 [0, 总时长] 之间，避免改过系统时间后数值离谱
+        val remainingMs = (endAtWall - System.currentTimeMillis()).coerceIn(0L, totalSeconds * 1000L)
+        endAtElapsed = SystemClock.elapsedRealtime() + remainingMs
+        finished = false
+        lastShownSeconds = -1
+        return true
     }
 
     private fun finishRest() {
+        if (finished) return
+        finished = true
         handler.removeCallbacks(tickRunnable)
         releaseWakeLock()
+        RestTimerStore.clear(this)
+        cancelEndAlarm()
         _state.value = null
         vibrateAlert()
         playAlertSound()
         // 结束提醒必须是「可划掉的普通通知」：前台通知不允许被划掉，
         // 所以先退出前台状态再发通知，用户划掉时 deleteIntent 才能停下铃声。
-        // 服务本身仍作为已启动服务存活到铃声结束，进程不会被立即回收。
+        // 服务本身仍作为已启动服务存活到铃声结束。
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIF_ID, buildFinished())
+        notificationManager().notify(NOTIF_ID, buildFinished())
         registerScreenWatcher()
         handler.postDelayed({
             stopAlertSound()
@@ -167,8 +254,9 @@ class RestTimerService : Service() {
     private fun silenceAndDismiss() {
         stopAlertSound()
         handler.removeCallbacksAndMessages(null)
+        RestTimerStore.clear(this)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
+        notificationManager().cancel(NOTIF_ID)
         stopSelf()
     }
 
@@ -186,18 +274,101 @@ class RestTimerService : Service() {
         }
     }
 
-    private fun notifyOngoing(remaining: Int) {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIF_ID, buildOngoing(remaining))
+    private fun notificationManager() =
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    private fun acquireWakeLock(durationMs: Long) {
+        releaseWakeLock()
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "CuriousTraining:RestTimer",
+        ).apply {
+            setReferenceCounted(false)
+            acquire(durationMs + 60_000L)
+        }
     }
 
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+    }
+
+    // ---- 系统精确闹钟：进程被杀也能把结束提醒拉起来 ----
+
+    private fun alarmPendingIntent(): PendingIntent = PendingIntent.getForegroundService(
+        this,
+        REQUEST_ALARM,
+        Intent(this, RestTimerService::class.java).setAction(ACTION_ALARM_FIRE),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun scheduleEndAlarm() {
+        val triggerAt = endAtElapsed
+        val manager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val operation = alarmPendingIntent()
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms()) {
+                manager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, operation)
+            } else {
+                // 没拿到精确闹钟权限时退化成系统闹钟（始终精确，代价是状态栏出现闹钟图标）
+                manager.setAlarmClock(
+                    AlarmManager.AlarmClockInfo(
+                        System.currentTimeMillis() + (triggerAt - SystemClock.elapsedRealtime()),
+                        openAppIntent(),
+                    ),
+                    operation,
+                )
+            }
+        } catch (e: SecurityException) {
+            manager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(
+                    System.currentTimeMillis() + (triggerAt - SystemClock.elapsedRealtime()),
+                    openAppIntent(),
+                ),
+                operation,
+            )
+        }
+    }
+
+    private fun cancelEndAlarm() {
+        val manager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        manager.cancel(alarmPendingIntent())
+    }
+
+    // ---- 通知 ----
+
     /**
-     * 倒计时同时用两种方式展示：
-     *  - 正文「剩余 X」每秒刷新（所有机型都能看到具体时间）；
-     *  - setUsesChronometer + setChronometerCountDown 让 SystemUI 自己走秒，
-     *    后台被限流、文字更新被丢弃时数字仍然会动。
+     * 进行中的休息通知：剩余时间用 RemoteViews 里的系统 Chronometer 显示，
+     * 由 SystemUI 自己走秒；同时保留 setUsesChronometer 作为标准模板的兜底。
      */
-    private fun buildOngoing(remaining: Int): Notification {
+    private fun buildOngoing(): Notification {
+        val remainingMs = (endAtElapsed - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        val remaining = RestTimerMath.remainingSeconds(remainingMs)
+        val dark = isNightMode()
+
+        val titleColor = if (dark) Color.WHITE else Color.parseColor("#111111")
+        val subtitleColor = if (dark) Color.parseColor("#B0B0B0") else Color.parseColor("#767676")
+
+        val views = RemoteViews(packageName, R.layout.notification_rest).apply {
+            setTextViewText(R.id.rest_notif_title, "休息中 · $label")
+            setTextViewText(
+                R.id.rest_notif_subtitle,
+                "共 ${formatDuration(totalSeconds)}",
+            )
+            setTextColor(R.id.rest_notif_title, titleColor)
+            setTextColor(R.id.rest_notif_subtitle, subtitleColor)
+            setTextColor(R.id.rest_notif_chronometer, titleColor)
+            // 基准 = 现在 + 剩余毫秒；倒计时由 SystemUI 里的 Chronometer 自己走
+            setChronometer(
+                R.id.rest_notif_chronometer,
+                SystemClock.elapsedRealtime() + remainingMs,
+                null,
+                true,
+            )
+            setChronometerCountDown(R.id.rest_notif_chronometer, true)
+        }
+
         val skipIntent = PendingIntent.getService(
             this,
             REQUEST_SKIP,
@@ -208,9 +379,12 @@ class RestTimerService : Service() {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("休息中 · $label")
             .setContentText("剩余 ${formatDuration(remaining)}")
+            .setCustomContentView(views)
+            .setCustomBigContentView(views)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
-            .setWhen(System.currentTimeMillis() + remaining * 1000L)
+            .setWhen(System.currentTimeMillis() + remainingMs)
             .setShowWhen(true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -220,8 +394,31 @@ class RestTimerService : Service() {
             .addAction(0, "跳过休息", skipIntent)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            // 锁屏上不隐藏内容：很多系统默认把「私密通知」锁屏收起，
+            // 这里显式公开，并提供一份标准布局的 publicVersion 给锁屏用
+            // （自定义 RemoteViews 不一定能在锁屏渲染）。
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPublicVersion(buildPublicVersion(remainingMs, remaining))
             .build()
     }
+
+    /** 锁屏用的「公开版本」：标准布局 + 系统计时器，不依赖自定义 RemoteViews。 */
+    private fun buildPublicVersion(remainingMs: Long, remaining: Int): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("休息中 · $label")
+            .setContentText("剩余 ${formatDuration(remaining)}")
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setWhen(System.currentTimeMillis() + remainingMs)
+            .setShowWhen(true)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setContentIntent(openAppIntent())
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
 
     private fun buildFinished(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
@@ -241,6 +438,7 @@ class RestTimerService : Service() {
             )
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
     private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
@@ -252,19 +450,11 @@ class RestTimerService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun acquireWakeLock(seconds: Int) {
-        releaseWakeLock()
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CuriousTraining:RestTimer").apply {
-            setReferenceCounted(false)
-            acquire((seconds + 60) * 1000L)
-        }
-    }
+    private fun isNightMode(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
 
-    private fun releaseWakeLock() {
-        wakeLock?.let { if (it.isHeld) it.release() }
-        wakeLock = null
-    }
+    // ---- 响铃/震动 ----
 
     private fun vibrateAlert() {
         val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -325,13 +515,18 @@ class RestTimerService : Service() {
         private const val REQUEST_SKIP = 11
         private const val REQUEST_OPEN = 12
         private const val REQUEST_DISMISS = 13
+        private const val REQUEST_ALARM = 14
         private const val EXTRA_SECONDS = "seconds"
         private const val EXTRA_LABEL = "label"
         private const val MAX_SECONDS = 3600
         private const val ALERT_SOUND_MS = 6000L
+        private const val TICK_MS = 300L
+        private const val ALARM_EARLY_TOLERANCE_MS = 1200L
         const val ACTION_START = "com.haoqi.training.action.REST_START"
         const val ACTION_SKIP = "com.haoqi.training.action.REST_SKIP"
         const val ACTION_DISMISS_ALERT = "com.haoqi.training.action.REST_DISMISS_ALERT"
+        const val ACTION_ALARM_FIRE = "com.haoqi.training.action.REST_ALARM_FIRE"
+        const val ACTION_SYNC = "com.haoqi.training.action.REST_SYNC"
 
         fun start(context: Context, seconds: Int, label: String) {
             createChannel(context)
@@ -349,6 +544,26 @@ class RestTimerService : Service() {
             )
         }
 
+        /**
+         * 回到 App / 冷启动时对账：如果持久化里还有未结束的休息，
+         * 就把服务和通知重新拉起来（进程被杀后不用等闹钟才恢复显示）。
+         */
+        fun ensureSynced(context: Context) {
+            if (state.value != null) return
+            val snapshot = RestTimerStore.load(context) ?: return
+            if (snapshot.endWallMillis - System.currentTimeMillis() <= 0L) {
+                RestTimerStore.clear(context)
+                return
+            }
+            createChannel(context)
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, RestTimerService::class.java).setAction(ACTION_SYNC),
+                )
+            }
+        }
+
         fun createChannel(context: Context) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (manager.getNotificationChannel(CHANNEL_ID) != null) return
@@ -361,7 +576,7 @@ class RestTimerService : Service() {
             manager.createNotificationChannel(channel)
         }
 
-        private fun formatDuration(seconds: Int): String {
+        internal fun formatDuration(seconds: Int): String {
             val minutes = seconds / 60
             val secs = seconds % 60
             return if (minutes > 0) "${minutes}分${secs.toString().padStart(2, '0')}秒" else "${secs}秒"

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -65,6 +66,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -115,10 +117,23 @@ fun TrainingScreen(
         initialPage = state.selectedDayIndex,
         pageCount = { days.size.coerceAtLeast(1) },
     )
+    val chipListState = rememberLazyListState()
 
+    // 点顶部标签 / 增删天之后，让翻页跟着过去（手指正在滑动时不抢）
     LaunchedEffect(state.selectedDayIndex, days.size) {
-        if (days.isNotEmpty() && pagerState.currentPage != state.selectedDayIndex) {
-            pagerState.animateScrollToPage(state.selectedDayIndex)
+        if (days.isEmpty()) return@LaunchedEffect
+        val target = state.selectedDayIndex.coerceIn(0, days.lastIndex)
+        if (pagerState.currentPage != target && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(target)
+        }
+    }
+    // 左右翻页过程中，顶部「第几天」标签跟着一起高亮、一起滚到可见位置，
+    // 不再等翻页完全停稳才更新（bug：标签和页面滑动不同步）。
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            if (page in 0 until pagerState.pageCount) {
+                chipListState.animateScrollToItem(page)
+            }
         }
     }
     LaunchedEffect(pagerState, days.size) {
@@ -140,15 +155,16 @@ fun TrainingScreen(
             Spacer(Modifier.width(8.dp))
         }
 
-        // 训练日切换：点击 + 左右滑动都可以
+        // 训练日切换：点击 + 左右滑动都可以；滑动时高亮跟着当前页走
         LazyRow(
+            state = chipListState,
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(days, key = { _, day -> day.id }) { index, day ->
                 DayChip(
                     label = day.displayName(),
-                    selected = index == state.selectedDayIndex,
+                    selected = index == pagerState.currentPage,
                     completed = day.completed,
                     onClick = {
                         if (index == state.selectedDayIndex) renamingDay = day
@@ -178,6 +194,9 @@ fun TrainingScreen(
         // 组间休息：应用内倒计时条，锁屏时看通知栏
         val appContext = androidx.compose.ui.platform.LocalContext.current
         val restState by RestTimerService.state.collectAsStateWithLifecycle()
+        // 休息期间不允许再点别的组开始下一次休息：只允许把已完成的组取消（撤销误触），
+        // 否则一碰就把当前的休息计时顶掉，组数也记乱了。
+        val resting = restState != null
         AnimatedVisibility(visible = restState != null) {
             restState?.let { rest ->
                 RestBanner(state = rest, onSkip = { RestTimerService.skip(appContext) })
@@ -200,6 +219,7 @@ fun TrainingScreen(
                 day = day,
                 exercises = state.exercisesByDay[day.id].orEmpty(),
                 doneSetsByExercise = state.doneSetsByExercise,
+                resting = resting,
                 onEditExercise = { editingExercise = it },
                 onAddExercise = { addingExercise = true },
                 onToggleSet = onToggleSet,
@@ -340,6 +360,11 @@ private fun RestBanner(state: RestTimerState, onSkip: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
+                Text(
+                    "休息结束或点「跳过」后再记录下一组",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                )
             }
             TextButton(onClick = onSkip) {
                 Text("跳过", color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -396,6 +421,7 @@ private fun DayPage(
     day: PlanDayEntity,
     exercises: List<ExerciseEntity>,
     doneSetsByExercise: Map<Long, Set<Int>>,
+    resting: Boolean,
     onEditExercise: (ExerciseEntity) -> Unit,
     onAddExercise: () -> Unit,
     onToggleSet: (ExerciseEntity, Int, Boolean) -> Unit,
@@ -404,17 +430,28 @@ private fun DayPage(
     onReorder: (List<Long>) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-    // 拖动时先改本地顺序让卡片跟手，松手后再写回数据库
-    var order by remember { mutableStateOf(exercises) }
+    // 拖动时先改本地顺序让卡片跟手，松手后再写回数据库；
+    // 平时直接用数据库里的最新列表。以前用 LaunchedEffect 在组合之后才把本地
+    // order 同步成 exercises，删除动作时会出现「数据库已经少了一项、本地 order
+    // 还留着旧项」的中间帧，LazyColumn 在 draw 阶段重新测量已经被回收的节点，
+    // 抛 IllegalArgumentException: measure is called on a deactivated node 直接闪退。
+    var dragOrder by remember { mutableStateOf<List<ExerciseEntity>?>(null) }
     var draggingId by remember { mutableStateOf<Long?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val heights = remember { mutableStateMapOf<Long, Int>() }
 
-    LaunchedEffect(exercises, draggingId) {
-        // 只要没在拖动，就用数据库里的最新数据覆盖本地顺序：
-        // 之前只比较 id，编辑重量/组数/名称后 id 不变，卡片会一直显示旧值。
-        if (draggingId == null) order = exercises
+    // 落库完成后丢掉本地顺序；若动作集合发生变化（例如删除了动作），也以数据库为准。
+    // 正在拖动时不动本地顺序，否则拖回原位会让卡片卡住不再跟手。
+    LaunchedEffect(exercises, dragOrder, draggingId) {
+        if (draggingId != null) return@LaunchedEffect
+        val local = dragOrder ?: return@LaunchedEffect
+        val localIds = local.map { it.id }
+        val dbIds = exercises.map { it.id }
+        if (localIds.toSet() != dbIds.toSet() || localIds == dbIds) dragOrder = null
     }
+
+    // 顺序里已经不存在的动作立刻剔除，绝不让已删除的卡片进入 LazyColumn 的测量。
+    val order = dragOrder?.filter { local -> exercises.any { it.id == local.id } } ?: exercises
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -494,34 +531,37 @@ private fun DayPage(
                             onDragStart = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 draggingId = exercise.id
+                                dragOrder = exercises
                                 dragOffset = 0f
                             },
                             onDrag = { change, amount ->
                                 change.consume()
                                 dragOffset += amount.y
-                                val from = order.indexOfFirst { it.id == exercise.id }
+                                val local = dragOrder ?: return@detectDragGesturesAfterLongPress
+                                val from = local.indexOfFirst { it.id == exercise.id }
                                 if (from >= 0) {
                                     val ownHeight = heights[exercise.id] ?: 1
-                                    if (dragOffset > ownHeight / 2f && from < order.lastIndex) {
-                                        val next = order[from + 1]
-                                        order = order.toMutableList().apply { add(from + 1, removeAt(from)) }
+                                    if (dragOffset > ownHeight / 2f && from < local.lastIndex) {
+                                        val next = local[from + 1]
+                                        dragOrder = local.toMutableList().apply { add(from + 1, removeAt(from)) }
                                         dragOffset -= (heights[next.id] ?: ownHeight)
                                     } else if (dragOffset < -ownHeight / 2f && from > 0) {
-                                        val previous = order[from - 1]
-                                        order = order.toMutableList().apply { add(from - 1, removeAt(from)) }
+                                        val previous = local[from - 1]
+                                        dragOrder = local.toMutableList().apply { add(from - 1, removeAt(from)) }
                                         dragOffset += (heights[previous.id] ?: ownHeight)
                                     }
                                 }
                             },
                             onDragEnd = {
+                                val finalOrder = dragOrder ?: exercises
                                 draggingId = null
                                 dragOffset = 0f
-                                onReorder(order.map { it.id })
+                                onReorder(finalOrder.map { it.id })
                             },
                             onDragCancel = {
                                 draggingId = null
                                 dragOffset = 0f
-                                order = exercises
+                                dragOrder = null
                             },
                         )
                     },
@@ -529,6 +569,7 @@ private fun DayPage(
                 ExerciseCard(
                     exercise = exercise,
                     doneSets = doneSetsByExercise[exercise.id].orEmpty(),
+                    setsLocked = resting,
                     onToggleSet = { index, wasDone -> onToggleSet(exercise, index, wasDone) },
                     onEdit = { onEditExercise(exercise) },
                     lifted = isDragging,
@@ -569,6 +610,8 @@ private fun ExerciseCard(
     onToggleSet: (index: Int, wasDone: Boolean) -> Unit,
     onEdit: () -> Unit,
     lifted: Boolean = false,
+    /** 休息期间锁住「还没完成」的组：不允许再点别的组开始下一次休息；已完成的组仍可取消。 */
+    setsLocked: Boolean = false,
 ) {
     val allDone = TrainingLogic.allSetsDone(doneSets, exercise.setCount)
     GroupCard(shadowElevation = if (lifted) 12.dp else 0.dp) {
@@ -622,6 +665,7 @@ private fun ExerciseCard(
                 SetBlock(
                     index = index,
                     done = index in doneSets,
+                    enabled = !setsLocked || index in doneSets,
                     onClick = { onToggleSet(index, index in doneSets) },
                 )
             }
@@ -662,9 +706,9 @@ private fun PartChip(label: String, value: String, modifier: Modifier = Modifier
     }
 }
 
-/** 组方块：点一下变黑 */
+/** 组方块：点一下变黑；休息期间未完成的组变灰、点不动 */
 @Composable
-private fun SetBlock(index: Int, done: Boolean, onClick: () -> Unit) {
+private fun SetBlock(index: Int, done: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     val background by animateColorAsState(
         if (done) Ink else Color.Transparent,
@@ -672,16 +716,22 @@ private fun SetBlock(index: Int, done: Boolean, onClick: () -> Unit) {
         label = "setBlock",
     )
     val contentColor = if (done) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val alpha by animateFloatAsState(
+        if (enabled) 1f else 0.4f,
+        Motion.press,
+        label = "setBlockAlpha",
+    )
 
     Box(
         modifier = Modifier
             .size(44.dp)
+            .alpha(alpha)
             .clip(shape)
             .background(background)
             .then(
                 if (done) Modifier else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             )
-            .pressScaleClickable(onClick = onClick),
+            .pressScaleClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(

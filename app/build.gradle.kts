@@ -13,8 +13,8 @@ android {
         applicationId = "com.haoqi.training"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "0.2.13"
+        versionCode = 18
+        versionName = "0.2.15"
     }
 
     buildTypes {

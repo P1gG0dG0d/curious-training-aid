@@ -120,11 +120,15 @@ private fun AppRoot() {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     val currentTab = remember(tabName) { AppTab.valueOf(tabName) }
 
-    // 回到前台时检查是否跨过午夜：饮食页自动切到新的一天
+    // 回到前台时检查是否跨过午夜：饮食页自动切到新的一天；
+    // 同时和休息计时的持久化状态对账（进程被杀后把通知/倒计时恢复出来）
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) dietViewModel.refreshDate()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                dietViewModel.refreshDate()
+                RestTimerService.ensureSynced(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -191,8 +195,12 @@ private fun AppRoot() {
                     onSaveExercise = trainingViewModel::saveExercise,
                     onDeleteExercise = trainingViewModel::deleteExercise,
                     onToggleSet = { exercise, setIndex, wasDone ->
-                        trainingViewModel.toggleSet(exercise, setIndex, wasDone) { seconds, label ->
-                            RestTimerService.start(context, seconds, label)
+                        // 休息期间不允许点新的一组（会把当前休息顶掉）；取消已完成组仍然允许。
+                        val restingNow = RestTimerService.state.value != null
+                        if (wasDone || !restingNow) {
+                            trainingViewModel.toggleSet(exercise, setIndex, wasDone) { seconds, label ->
+                                RestTimerService.start(context, seconds, label)
+                            }
                         }
                     },
                     onToggleDayCompleted = { day, completed ->

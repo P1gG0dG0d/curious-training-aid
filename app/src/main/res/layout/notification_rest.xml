@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  休息倒计时的通知内容（RemoteViews）。
+  关键点：剩余时间用系统 Chronometer 控件显示，由 SystemUI 自己按时间基准走秒，
+  不依赖 App 每秒 notify。息屏、后台限流、进程被杀都不会让数字冻结。
+  布局保持紧凑（锁屏通知卡片高度有限，太高会被裁掉一行）。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/rest_notif_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#111111" />
+
+        <TextView
+            android:id="@+id/rest_notif_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="11sp"
+            android:textColor="#767676" />
+    </LinearLayout>
+
+    <Chronometer
+        android:id="@+id/rest_notif_chronometer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#111111" />
+</LinearLayout>
