@@ -79,6 +79,7 @@ class RestTimerService : Service() {
 
     private val tickRunnable = object : Runnable {
         override fun run() {
+            lastTickElapsed = SystemClock.elapsedRealtime()
             val remainingMs = endAtElapsed - SystemClock.elapsedRealtime()
             if (remainingMs <= 0L) {
                 finishRest()
@@ -107,23 +108,6 @@ class RestTimerService : Service() {
                     return START_NOT_STICKY
                 }
                 startTimer(seconds, intent.getStringExtra(EXTRA_LABEL) ?: "休息")
-            }
-
-            // 系统闹钟到点：可能是在进程被杀之后把服务拉起来，先满足前台要求再收尾。
-            ACTION_ALARM_FIRE -> {
-                if (!restoreIfNeeded()) {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-                startForegroundSafe(buildOngoing())
-                handler.removeCallbacks(tickRunnable)
-                if (endAtElapsed - SystemClock.elapsedRealtime() > ALARM_EARLY_TOLERANCE_MS) {
-                    // 闹钟提前触发（例如用户改了系统时间）：继续正常走秒
-                    scheduleEndAlarm()
-                    handler.post(tickRunnable)
-                } else {
-                    finishRest()
-                }
             }
 
             // 进程被杀后重建（START_STICKY）或回到 App 时对账
@@ -161,7 +145,7 @@ class RestTimerService : Service() {
                 stopAlertSound()
                 releaseWakeLock()
                 cancelEndAlarm()
-                RestTimerStore.clear(this)
+                RestTimerStore.clearTimer(this)
                 _state.value = null
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 notificationManager().cancel(NOTIF_ID)
@@ -183,6 +167,7 @@ class RestTimerService : Service() {
         finished = false
         stopAlertSound()
         acquireWakeLock(seconds * 1000L)
+        RestTimerStore.clearAlerted(this)
         RestTimerStore.save(this, endAtWall, totalSeconds, label)
         scheduleEndAlarm()
         // 清掉上一轮（可能还在响铃/等待退出）的所有回调
@@ -211,9 +196,18 @@ class RestTimerService : Service() {
         finished = true
         handler.removeCallbacks(tickRunnable)
         releaseWakeLock()
-        RestTimerStore.clear(this)
+        RestTimerStore.clearTimer(this)
         cancelEndAlarm()
         _state.value = null
+
+        // 闹钟接收器可能已经替这一轮补过提醒（进程被冻结/杀掉过），不要重复响铃
+        if (RestTimerStore.isAlerted(this, ALERT_DEDUP_MS)) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+        RestTimerStore.markAlerted(this)
+
         vibrateAlert()
         playAlertSound()
         // 结束提醒必须是「可划掉的普通通知」：前台通知不允许被划掉，
@@ -254,23 +248,30 @@ class RestTimerService : Service() {
     private fun silenceAndDismiss() {
         stopAlertSound()
         handler.removeCallbacksAndMessages(null)
-        RestTimerStore.clear(this)
+        RestTimerStore.clearTimer(this)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         notificationManager().cancel(NOTIF_ID)
         stopSelf()
     }
 
-    /** Android 14 起显式传前台服务类型，避免特殊用途类型未生效被系统杀。 */
+    /** Android 14 起显式传前台服务类型；系统不允许后台起前台服务时降级，不要崩掉整个 App。 */
     private fun startForegroundSafe(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIF_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-            )
-        } else {
-            startForeground(NOTIF_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIF_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+        } catch (error: Exception) {
+            // 澎湃 OS 等 ROM 会拦掉后台启动前台服务；退化成普通通知并结束服务，
+            // 不能把异常抛到主线程（会以「闪退」的形式出现）。
+            runCatching { notificationManager().notify(NOTIF_ID, notification) }
+            stopSelf()
         }
     }
 
@@ -294,12 +295,17 @@ class RestTimerService : Service() {
         wakeLock = null
     }
 
-    // ---- 系统精确闹钟：进程被杀也能把结束提醒拉起来 ----
+    // ---- 系统精确闹钟：进程被冻结/杀掉也能把结束提醒拉起来 ----
 
-    private fun alarmPendingIntent(): PendingIntent = PendingIntent.getForegroundService(
+    /**
+     * 闹钟直接投递到广播接收器（[RestAlarmReceiver]），而不是拉前台服务：
+     * 澎湃 OS 会拦掉后台启动前台服务，但广播一定会送达，
+     * 接收器可以在没有服务的情况下震动并发出走闹钟音频通道的通知。
+     */
+    private fun alarmPendingIntent(): PendingIntent = PendingIntent.getBroadcast(
         this,
         REQUEST_ALARM,
-        Intent(this, RestTimerService::class.java).setAction(ACTION_ALARM_FIRE),
+        Intent(this, RestAlarmReceiver::class.java).setAction(RestAlarmReceiver.ACTION_ALARM_FIRE),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
@@ -509,6 +515,11 @@ class RestTimerService : Service() {
         /** 界面用它显示「休息中 · 剩余 xx 秒」，不用轮询服务。 */
         val state: StateFlow<RestTimerState?> = _state.asStateFlow()
 
+        /** 服务是否还在正常走秒；闹钟接收器靠它决定「交给服务」还是「自己补提醒」。 */
+        @Volatile
+        var lastTickElapsed: Long = 0L
+            private set
+
         private const val CHANNEL_ID = "rest_timer_v2"
         private const val CHANNEL_NAME = "休息计时与结束提醒"
         private const val NOTIF_ID = 1001
@@ -521,11 +532,13 @@ class RestTimerService : Service() {
         private const val MAX_SECONDS = 3600
         private const val ALERT_SOUND_MS = 6000L
         private const val TICK_MS = 300L
-        private const val ALARM_EARLY_TOLERANCE_MS = 1200L
+
+        /** 同一轮休息只提醒一次：服务收尾和闹钟补提醒之间用这个窗口去重。 */
+        private const val ALERT_DEDUP_MS = 3 * 60 * 1000L
+
         const val ACTION_START = "com.haoqi.training.action.REST_START"
         const val ACTION_SKIP = "com.haoqi.training.action.REST_SKIP"
         const val ACTION_DISMISS_ALERT = "com.haoqi.training.action.REST_DISMISS_ALERT"
-        const val ACTION_ALARM_FIRE = "com.haoqi.training.action.REST_ALARM_FIRE"
         const val ACTION_SYNC = "com.haoqi.training.action.REST_SYNC"
 
         fun start(context: Context, seconds: Int, label: String) {
@@ -552,7 +565,7 @@ class RestTimerService : Service() {
             if (state.value != null) return
             val snapshot = RestTimerStore.load(context) ?: return
             if (snapshot.endWallMillis - System.currentTimeMillis() <= 0L) {
-                RestTimerStore.clear(context)
+                RestTimerStore.clearTimer(context)
                 return
             }
             createChannel(context)

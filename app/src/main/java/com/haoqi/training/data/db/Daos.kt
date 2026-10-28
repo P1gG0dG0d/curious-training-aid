@@ -80,6 +80,10 @@ interface TrainingDao {
 
     @Query("UPDATE plan_days SET completed = :completed WHERE id = :dayId")
     suspend fun setDayCompleted(dayId: Long, completed: Boolean)
+
+    /** 撤销「这一天练完」时，把这一天的所有组一起恢复成未完成。 */
+    @Query("UPDATE set_states SET done = 0 WHERE exerciseId IN (SELECT id FROM exercises WHERE dayId = :dayId)")
+    suspend fun clearSetsOfDay(dayId: Long)
 }
 
 @Dao

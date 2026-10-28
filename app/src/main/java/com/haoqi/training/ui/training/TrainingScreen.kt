@@ -124,7 +124,7 @@ fun TrainingScreen(
         if (days.isEmpty()) return@LaunchedEffect
         val target = state.selectedDayIndex.coerceIn(0, days.lastIndex)
         if (pagerState.currentPage != target && !pagerState.isScrollInProgress) {
-            pagerState.animateScrollToPage(target)
+            runCatching { pagerState.animateScrollToPage(target) }
         }
     }
     // 左右翻页过程中，顶部「第几天」标签跟着一起高亮、一起滚到可见位置，
@@ -132,7 +132,8 @@ fun TrainingScreen(
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
             if (page in 0 until pagerState.pageCount) {
-                chipListState.animateScrollToItem(page)
+                // 极少数机型上列表还没测量完就开始滚动会抛异常，兜底不让它闪退
+                runCatching { chipListState.animateScrollToItem(page) }
             }
         }
     }

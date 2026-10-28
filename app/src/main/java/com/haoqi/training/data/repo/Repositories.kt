@@ -85,6 +85,9 @@ class TrainingRepository(private val db: AppDatabase) {
 
     suspend fun setDayCompleted(dayId: Long, completed: Boolean) = db.withTransaction {
         dao.setDayCompleted(dayId, completed)
+        // 点「撤销」时，把这一天所有已经变黑的组一起恢复成未完成，
+        // 否则再点「完成」前那些组还是黑的，用户得一组一组手动取消。
+        if (!completed) dao.clearSetsOfDay(dayId)
     }
 
     private suspend fun syncSetCountLocked(exercise: ExerciseEntity) {
